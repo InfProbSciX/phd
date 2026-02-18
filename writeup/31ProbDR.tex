@@ -1,0 +1,1133 @@
+\chapter{ProbDR: A unifying framework for coordinate dimensionality reduction}
+\label{part:ii}
+
+The aim of the thesis is to show that explicit probabilistic models underpin methods of representation learning, and that often, they involve a minimal statistic of the data that limits degrees of freedom. We were motivated by a desire to find an interpretable framework that can enable comparison of the many methods used in scientific representation learning.
+
+In the previous chapter, we provided a background on ideas in probabilistic representation learning to contextualise the field and explored real-world use-cases of latent variable models in science. We showed that constraints are commonly observed in scientific representation learning, that involve the usage of constrained estimators of known quantities. In this chapter, we focus on the large set of \textbf{dimensionality reduction} algorithms, reviewed briefly in the previous chapter (\cref{chp:bck-nea}), where we saw that they do not fall into the taxonomy of methods in probabilistic representation learning.
+
+In this chapter, we provide the probabilistic interpretation for many dimensionality reduction methods used in science, thereby answering what they \textit{do}: covariance estimation (or nearest neighbour prediction, which as we show, can be framed as covariance estimation). We also show the implicit assumptions that they make: they use specific linear/non-linear covariance kernels and use a non-standard covariance estimator. We show that the framework has many connections within its different views, and show that the various interpretations we present morph between one another, showing coherence of the models presented. The following sections are all presented with the following roadmap in mind,
+$$ \text{the interpretation} \rightarrow \text{what are the model assumptions?}\rightarrow \text{are the transforms coherent?} $$
+We will now summarise the major results of the chapter.
+
+\section{Overview of results}
+
+In this chapter, we unify prevalent dimensionality reduction methods, from a probabilistic perspective, draw comparisons to dual-probabilistic PCA and GPLVMs, and explain what such methods do. Through this process, we learn that GPLVMs are not as constrained as algorithms in the field, and learn what the ground truth underlying constraints that appear in scientific representation learning are. These constraints appear mainly through the construction and usage of atypical covariance estimators, and static variational constraints.
+
+Concretely, we show that many dimensionality reduction algorithms are approximately inference algorithms within a specific modelling class, that we call \textbf{ProbDR}. Let $\hat\S$ be an estimated data covariance. Then, we write the model class as,
+$$\gamma\GLS{Sh} | \X \sim (\text{Inv-})\GLS{W}(\X\X^T + \beta \H \; K(\X, \X) \; \H + \kappa \I, \nu),$$
+where $\X$ correspond to the latent variables (also known as coordinates), $K$ is a Cauchy (rational quadratic) kernel matrix, and $\H$ is a centering matrix. All parameters apart from the latents $\X$ are known, and depend on the choice of algorithm being approximated. The primary difference between methods stems from the choice of estimator of $\hat{\S}$. Classical models also fit neatly into this model class, enabling comparability. This form sheds light into why many methods are similar: because they often estimate the same underlying statistics of the data, and assume similar models, with subtle differences arising from the choice of data covariance estimators or non-linear latent covariances. Although there is widespread effort in the community to understand these methods from ``attraction'' and ``repulsion'' terms used in the loss function, to the best of our knowledge, this is the first presentation of the methods studied in the thesis as maximum a-posteriori algorithms given a probabilistic model.
+
+Our interpretation arises due to two main results, which are as follows. First, we observe that many DR algorithms, such as dual-probabilistic PCA, MDS, kernel-PCA, Laplacian Eigenmaps, Locally Linear Embedding, and Isomap, output a low-dimensional representation by,
+\begin{enumerate}
+    \item First estimating a PSD matrix which we interpret as a covariance $\hat{\S}$ or precision $\hat{\mathbf{\Gamma}}$ matrix. In PCA, for example, $\hat{\S}(\Y) = \Y\Y^T/d$, and in Laplacian Eigenmaps, $\GLS{Pr} = \L$ encodes a nearest neighbour adjacency matrix,
+    \item Then, setting the embedding $\X$ to the $\q$ scaled eigenvectors of the matrix corresponding to the largest or lowest eigenvalues (referred to as major \& minor eigenvectors respectively).
+\end{enumerate}
+The first result of the thesis arises due to a simple observation: that dual-probabilistic PCA involves an eigendecomposition. Therefore, methods that use an eigendecomposition to construct latent variables must be using simply a non-standard covariance estimator, as we show below.
+\begin{theorem}{Assume a Wishart model for a covariance $\hat{\S}$ (or precision $\hat{\mathbf{\Gamma}}$) that uses a linear kernel (or its inverse, if a precision is being modelled) to describe the centrality parameter, using the latents $\X$. The MAP estimate of $\X$, with an improper uniform prior over $\X$, occurs at the $\q$ principal/major and minor scaled eigenvectors of $\hat{\S}$ \& $\hat{\mathbf{\Gamma}}$ respectively,}
+\begin{align}
+    \label{eqn:probdr:linear}
+    \hat{\mathbf{\S}} * \nu | \mathbf{X} \sim \mathcal{W}\left(\X \X^T + \sigma^2 \I_n, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ maj}} (\mathbf{\Lambda}_{\q \text{ maj}} - \hat \sigma^2 \I_{\q})^{1/2} \mathbf{R}^T \\
+    \hat{\mathbf{\Gamma}} * \nu | \mathbf{X} \sim \mathcal{W}\left((\X \X^T + \beta \I_n)^{-1}, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ min}} (\mathbf{\Lambda}^{-1}_{\q \text{ min}} - \hat \beta \I_{\q})^{1/2} \mathbf{R}^T \label{eqn:probdr:linear-prec}
+\end{align}
+where $\U_\q, \mathbf{\Lambda}_\q$ are matrices of $\q$ eigenvectors and corresponding eigenvalues, $\mathbf{R}$ is an arbitrary rotation matrix and $\nu$ are arbitrary degrees of freedom (i.e. their choice does not affect the embedding). $\hat{\S} = \Y\Y^T/d$ with $\nu=d$ recovers dual-probabilistic PCA.
+\label{thm:probdr:two-step-mle}
+\end{theorem}
+% https://en.wikipedia.org/wiki/Variance-gamma_distribution
+\noindent Our second result, which interprets t-SNE-like algorithms in \cref{chp:probdr-nonlin}, adds a non-linear component to the centrality parameter.
+\begin{theorem}{UMAP and t-SNE-like algorithms correspond to MAP estimation of \GLS{X} assuming a Wishart distribution on a precision matrix, estimated by the graph Laplacian $\L$, that uses the inverse of a familiar non-linear kernel,}
+\begin{align}
+    \label{eqn:probdr:cauchy}
+    \L | \X \sim \mathcal{W} \left(\left(\X \X^T + 0.5\H \P \H + \I/2\tilde{\epsilon} \right)^{-1}, n \right),
+\end{align}
+where $\tilde{\epsilon} \approx 4n_{\text{neg}} n_{\text{neigh}}/3n$ is defined at the outset by the choice of hyperparameters, $\P_{ij} = 1/(1 + \|\X_i - \X_j\|^2)$ is the Cauchy (Student-t or rational quadratic) kernel, and $\H$ is a centering matrix.
+\end{theorem}
+\noindent We will show that these interpretations are semantically consistent in accordance with the main claim of the thesis, that probabilistic models can correspond to semantic grammars over what they model. We show that the models are coherent even under transformations, and are the models that would be selected to model the statistic of interest. Efficient inference ideas in this framework will show that there is a correspondence between our linear and non-linear covariance interpretations.
+
+The \textbf{what} that is modelled by many methods (the choice of covariance estimator), like many statistics estimated in the previous chapter, estimates a \textbf{particular characteristic} of the data. For example, we argue that a graph Laplacian is a ``lossy'' estimate of the data precision, and only some characteristics are retained. \textbf{What} exactly is retained, e.g. when a kNN graph is computed on data that is highly zero-inflated, as opposed to when it is computed using data that is more Gaussian-like, or when the data has extreme values, we leave to future research, but we point out exactly \textbf{how} these statistics are calculated for every algorithm.
+% In some ways, statistics such as the graph Laplacian correspond to extreme-value estimators, as they involve small-ball behaviour. % fv: add citation
+
+In the last part of this chapter, we show that all algorithms studied also have variational interpretations. As an example, first represent the data covariance that is being modelled as $\M$. Then, MAP inference in our linear Wishart model (\cref{thm:probdr:two-step-mle}, first case) is equivalent to finding $\argmin_{\X} \text{KL}(q(\M)\|p(\M))$, assuming a model for the covariance,
+$$p(\M | \X) = \mathcal{W}(\M | \X \X^T + \sigma^2 \I, \nu),$$
+and a variational constraint for the covariance that uses the observed estimate of the covariance $\hat\S$ as the centrality parameter,
+$$q(\M | \Y) = \mathcal{W}(\M| \hat{\S}(\Y), \nu).$$
+The second case is similar, moreover, the t-SNE objective was originally given in \cite{tsne} as a KL-divergence, also between a distribution that depends on the data with no learnable parameters and a distribution that depends on the latents (in that order, over an adjacency matrix)\footnote{In our work, all KL-divergences appear as $\text{KL}(q||p)$. In the (t-)SNE papers, \cite{sne, tsne} use notation $\text{KL}(p||q)$; we flip this notation (and relabel the distributions) but otherwise keep calculations identical so that the functional objective remains unchanged. It is more natural, we argue, to denote the variational constraint that only acts on the data as $q$, and the model distribution as $p$, unlike how this is presented in the (t-)SNE papers.}.
+
+A graphical summary of the ideas presented thus far is illustrated in \cref{fig:probdr:intro:ga}. The illustration shows that the likelihood interpretations, where the covariance is modelled by a Wishart using a covariance kernel, or a precision using the inverse of the kernel. This is followed by our variational framework, and finally, the specific choices of estimators that lead to the various algorithms is summarised.
+
+The variational interpretations will be useful for the next chapter, where we use ideas presented in \cite{whitebox-transformer, ssl_as_vi, contrastive-as-sne} to understand transformers of \cite{transformer} as unrolled inference assuming our variational Laplacian Eigenmaps interpretation. We will show that by constructing this probabilistic connection, the performance of the architecture can be improved, highlighting the usefulness of our framework for a seemingly unrelated use-case in representation learning.
+
+% fv:
+% Stuck with the first diagram S is sampled from a wishart with some scale parameter k, what is M doing ?  its like a measurement operator that decides how you estimate  M from  the data. Can you make this more clear ? \hat{S} = M(Y) 
+% Why do you have two arrows going into S^-1 ?  for both S and Gamma ? little lost here why tis extra hierarchy ? 
+% In the variational  diagram does W stand for wishart ?  why change from Wishart(k) notation  to W(M|k) ?  its like using both of these : 
+
+% X ~ Normal(0, 1)
+
+% p(x) = N(x|0,1)
+
+% I think its better to overload e.g.:
+
+% X ~ Normal(0, 1)
+
+% p(x) = Normal(x|0,1)
+
+% Or
+
+% X ~ N(0, 1)
+
+% p(x) = N(x|0,1)
+
+% ? not a major comment. 
+% Making more exiplict what M is might help with the VI view  is the wishart really W(M| k) or is it W(S_hat|k) where S = M(Y) , you could use M(Y)  to be clearer and allow to switch between S and Gamma
+% vargfran
+% 24 December, 10:28 am
+% little lost tbh with what M is here in the VI diagram
+\begin{figure}
+    \centering
+    \vspace{-1cm}
+    \includegraphics[width=0.825\linewidth]{illustrations/intro_probdr.pdf}
+    \vspace{-1cm}
+    \caption{A graphical abstract summarising the main contributions of the chapter. \\
+    \textbf{Top:} A summary of the likelihood views of \cref{chp:probdr-lin} and \cref{chp:probdr-nonlin} showing that two main interpretations underpin ProbDR: a covariance $\S$ or \textbf{equivalently} a precision $\boldsymbol{\Gamma}$, is modelled by a covariance kernel $k$ or its inverse respectively. The two views can instead be written in terms of a covariance $\S$, modelled by an either a Wishart or inverse-Wishart distribution with centrality matrix $k$. \\
+    \textbf{Middle:} The variational view of ProbDR showing that the likelihood interpretations have a KL-minimising view, where the model is defined on an arbitrary matrix $\M$ representing the covariance, with a variational constraint placed upon it. The constraint has the observed data matrix as the centrality parameter, and is a static constraint. \\
+    \textbf{Bottom:} The specific choices of $\S$ and $\boldsymbol{\Gamma}$ and $k$ that lead to the various algorithms we consider.
+    }
+    \label{fig:probdr:intro:ga}
+\end{figure}
+
+\section{Likelihood interpretations: linear cases}
+\label{chp:probdr-lin}
+
+In this section\footnote{This section follows our results in \mecite{probdr}.}, we show how the first result of ProbDR arises, that MAP inference follows eigendecomposition assuming a Wishart latent variable model with a linear covariance kernel. We will also explain how many DR algorithms in practice fit into this framework. As part of enumerating the various connections, we show how the covariance-view and the precision-view recover the same solution when the traditional covariance estimator (corresponding to dual-probabilistic PCA) is used.
+
+As summarised earlier, many DR algorithms compute embeddings in a two step process,
+\begin{enumerate}
+    \item Estimate a PSD matrix which is interpreted as a covariance $\hat{\S}$ or precision $\hat{\mathbf{\Gamma}}$ matrix. This can be a straightforward function of the data, e.g. dual-probabilistic PCA, where $\hat\S(\Y) = \Y\Y^T/d$, or an estimator constructed in a hierarchical fashion, as in the case of LLE, which we present later in this chapter.
+    \item Set the latent embedding $\X$ to $\q$ scaled eigenvectors of the matrix above corresponding to the largest or lowest eigenvalues (referred to in this work as major and minor eigenvectors, respectively).
+\end{enumerate}
+%
+Firstly, we show that step 2 is MAP estimation for $\X$, in a quasi-maximum likelihood sense, meaning that we use an estimated statistic $\hat\S$ that may not be the standard maximum-likelihood estimator under a globally assumed model\footnote{\textbf{for that statistic}---none of our models are generative models for the full dataset.}. \cite{qmle} showed that using a model family that is not the data-generating distribution for inference still results in a valid estimate, the \textbf{``quasi-maximum likelihood estimate''} in a KL sense; the QMLE minimises the KL-divergence between the true and assumed models.
+
+Mathematically, inference for the latents given the observed statistic represented as the random variable $\S$, which is a function of the data $\Y$, follows,
+\begin{align}
+    \hat{\X} &= \argmax_{\X} \log p_\X(\X | \S) \nonumber \\
+    &= \argmax_{\X} \log p_\mathcal{M}(\S | \X) \underbrace{p(\X)}_{\propto 1} && \text{Bayes rule}
+    \label{eqn:wish-mle}
+\end{align}
+We show the model that determines the model density $p_\mathcal{M}$ in \cref{thm:probdr:two-step-mle}, restated below; the MAP estimate of $\X$, with an improper uniform prior over $\X$, given Wishart models with linear covariance kernels occurs at the $\q$ principal/major and minor scaled eigenvectors of the covariance estimate $\hat{\S}$ and the precision estimate $\hat{\mathbf{\Gamma}}$ respectively,
+\begin{align*}
+    \hat{\mathbf{\S}} * \nu | \mathbf{X} \sim \mathcal{W}\left(\X \X^T + \sigma^2 \I_n, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ maj}} (\mathbf{\Lambda}_{\q \text{ maj}} - \hat \sigma^2 \I_{\q})^{1/2} \mathbf{R}^T \\
+    \hat{\mathbf{\Gamma}} * \nu | \mathbf{X} \sim \mathcal{W}\left((\X \X^T + \beta \I_n)^{-1}, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ min}} (\mathbf{\Lambda}^{-1}_{\q \text{ min}} - \hat \beta \I_{\q})^{1/2} \mathbf{R}^T
+\end{align*}
+where $\U_\q, \mathbf{\Lambda}_\q$ are matrices of $\q$ eigenvectors and corresponding eigenvalues, $\mathbf{R}$ is an arbitrary rotation matrix and $\nu$ are arbitrary degrees of freedom. $\hat{\S} = \Y\Y^T/d$ with $\nu=d$ recovers dual-probabilistic PCA. We will refer to the first of these results as the \textbf{covariance view} and the second as the \textbf{precision view}.
+
+Therefore, we can interpret any DR algorithm first computing a PSD matrix, and then obtaining a representation through an eigendecomposition, as first estimating a covariance or a precision matrix using a non-standard estimator (e.g., a graph Laplacian), and then using the models above for inference.
+
+We will show later in the section, in \cref{probdr:lin:connections}, how different algorithms can all be explained as inference methods in this framework. These include dual-probabilistic PCA, random projections, CMDS, LLE, LE, MVU, diffusion maps, kernel-PCA and Isomap.
+
+Before proving the main results, we provide a brief explanation for the notation we use with Wishart distributions. In this section, we denote statements involving Wishart distributed random matrices as,
+$$ \T \sim \mathcal{W}(\hat{\M}, d). $$
+The square random matrix $\T$ without an overset hat or tilde represents a matrix that is scaled in some way, whereas matrices with an overset hat or tilde represent widely-used statistics such as a covariance matrix. Using the model above as an example, $\mathbb E(\T) = \hat{\M} * d$. Therefore, we write $\hat \M$ as a matrix describing centrality of $\hat \T$, where $\hat \T = \T/d$. As an additional example, consider the case of dual-probabilistic PCA. The sample pairwise data covariance is calculated as $\hat{\S} = \Y\Y^T/d$, and is an unscaled quantity, in the sense that the centrality parameter of the Wishart $\hat \M = \X\X^T + \sigma^2\I$ estimates $\hat \S$. In this example, we denote by $\S$ the matrix $\Y\Y^T$, which, assuming that the columns of $\Y$ are independent multivariate normal samples, is Wishart distributed and \textbf{scaled by the degrees of freedom} i.e. $\S = d * \text{Cov}(\Y)$.
+
+The rest of the section is dedicated to proving the covariance view in \cref{sub:dppca} and the precision view in \cref{sub:dpmca}, which immediately follow, and then showing how various algorithms connect to the framework in \cref{probdr:lin:connections}.
+
+\subsection{Derivation of the linear cases}
+
+At the start of the section, we presented a view that algorithms involving the eigendecomposition of a similarity matrix are MAP inference algorithms given a Wishart model with a linear kernel used as a centrality parameter. In this subsection, we show how this arises.
+
+The results are inspired by two main results; dual-probabilistic \textbf{principal component analysis} of \cite{gplvm}, based on the work of \cite{ppca}, and dual-probabilistic \textbf{minor components analysis}, which is a novel perspective we introduce based on the results of \cite{mca}.
+
+The idea of this section is simply that dual-probabilistic PCA constructs a low-dimensional embedding using the eigendecomposition of a covariance matrix. Any algorithm therefore using an eigendecomposition of a PSD matrix must be using the same model as dp-PCA, but with a different estimate of the sufficient statistic (and therefore performing quasi-maximum likelihood estimation). Just one modification needs to be made: the Gaussian assumption needs to be written (equivalently) using a Wishart, so that we explicitly model the sufficient statistic---the covariance.
+
+The outline for the derivation follows; we will first show that normal and Wishart statements for models such as ours lead to the same likelihood. Using this fact, we show that dp-PCA can be formulated using a Wishart statement. Finally, we show that describing (misspecifying) the data's precision matrix instead of a covariance with a Wishart distribution leads to the same embeddings (up to a small scaling factor), which leads to the precision view. For simplicity, we generally assume that $\Y$ has a zero mean (it is centred).
+
+\begin{lemma}
+\label{thm:wish-models}
+Let $\mathbf{F} \in \mathbb R^{n \times d}$ and $\T := \Tilde{\T} * d := \mathbf{F}\mathbf{F}^T$. The log likelihood of a multivariate normal with zero mean and unknown covariance $\hat\M$ is equal to the likelihood of a Wishart with centrality parameter $\hat\M$. Concretely, assuming,
+\begin{align*}
+    \mathbf{F} | \hat \M &\sim \mathcal{MN}(0, \hat \M, \I_d) \text{ and }
+    \T | \hat \M \sim \mathcal{W}\left(\hat \M, d \right), \\
+    \log p_{\mathcal{MN}}(\mathbf{F} | \hat \M) &\overset+= \log p_{\mathcal{W}}(\T | \hat \M) \overset+= -\dfrac{d}{2} \text{tr}\left(\Tilde{\T} \hat \M^{-1} \right) - \dfrac{d}{2} \log |\hat \M|.
+\end{align*}
+\end{lemma}
+%
+\begin{proof} of \cref{thm:wish-models}.
+In the multivariate normal case,
+\begin{align*}
+    \mathcal L(\mathbf{F}) = \log p_{\mathcal{MN}}(\mathbf{F} | \hat \M) &= -\dfrac{1}{2} \text{tr}\left( \I_d \mathbf{F}^T \hat \M^{-1} \mathbf{F} \right) - \dfrac{d}{2} \log |\hat \M| -  \dfrac{n}{2} \log |\I_d| - \dfrac{nd}{2} \log 2\pi \\
+    &= -\dfrac{d}{2} \text{tr}\left(\dfrac{1}{d} \mathbf{F} \mathbf{F}^T \hat \M^{-1} \right) - \dfrac{d}{2} \log |\hat \M| + c, \text{\hspace{1.5cm} (trace is cyclic)} \\
+    &= -\dfrac{d}{2} \text{tr}\left(\Tilde{\T} \hat \M^{-1} \right) - \dfrac{d}{2} \log |\hat \M| + c.
+\end{align*}
+%
+In the Wishart case when $d \geq n$, the sampling distribution of $\mathbf{F}\mathbf{F}^T$ is by definition Wishart, so the likelihood with respect to $\Tilde{\mathbf{T}}$ is obtained easily,
+\begin{align*}
+    \mathcal L(\mathbf{F}) = \log p_{\mathcal W}(\mathbf{F}\mathbf{F}^T | \hat \M) = \log p_{\mathcal W}(\Tilde{\T} * d | \hat \M) = -\dfrac{d}{2} \text{tr}\left( \hat \M^{-1}\Tilde{\T} \right) - \dfrac{d}{2} \log |\hat \M| + c.
+\end{align*}
+%
+In the case when $d < n$, the distribution of $\mathbf{F}\mathbf{F}^T$ is a singular Wishart, a description of which is given by \cite{singular-wishart} (Theorem 6), who shows that the likelihood is identical to the statement above up to additive constants.
+\end{proof}
+%
+\noindent Using this fact, we are now able to prove the covariance and precision views of the linear ProbDR cases (i.e. the cases that use a linear covariance kernel).
+
+\subsubsection{Dual-probabilistic PCA}
+\label{sub:dppca}
+
+We will now derive the covariance view of linear ProbDR. We use the equivalence derived between normal and Wishart modelling statements to show that dp-PCA can be written as a Wishart statement, which immediately gives us the first half of the main result, restated below,
+\begin{align*}
+    \hat{\mathbf{\S}} * \nu | \mathbf{X} \sim \mathcal{W}\left(\X \X^T + \sigma^2 \I_n, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ maj}} (\mathbf{\Lambda}_{\q \text{ maj}} - \hat \sigma^2 \I_{\q})^{1/2} \mathbf{R}^T
+\end{align*}
+of this section, \cref{thm:probdr:two-step-mle}.
+
+\begin{lemma}[Dual-probabilistic principal components analysis dp-PCA] The MAP estimate of $\X$ assuming a Wishart with a linear kernel (or a linear GP),
+$$ \mathcal{N}(\Y | 0, \X\X^T + \sigma^2 I) \text{ or } \mathcal{W} (\S | \X\X^T + \sigma^2 I, d) $$
+where $\S := \Tilde{\S} * d = \Y\Y^T$ and $\C = \X\X^T + \sigma^2 \I$ corresponds to optimisation of the likelihood,
+$$ \argmax_{\X} - \frac{d}{2} \log |\C| - \frac{d}{2} \text{tr}(\Tilde{\S}\C^{-1}) + c, $$
+the solution to which occurs at the major scaled eigenvectors of the estimator $\tilde{\S}$,
+$$ \hat{\X} = \mathbf{U}_{\q} (\mathbf{\Lambda}_\q - \hat{\sigma}^2 \I_{\q})^{1/2} \mathbf{R}^T, $$
+where $\hat{\sigma}^2 = \frac{\sum_{i=\q+1}^{n} \lambda_i}{n - \q}$ and $\mathbf{U}_\q \text{ and } \mathbf{\Lambda}_\q$ are the matrices of $\q$ major eigenvectors and eigenvalues of $\Tilde{\S}$.
+\label{thm:pca}
+\end{lemma}
+
+\begin{proof}[Proof of \cref{thm:pca}.]
+The Wishart model is equivalent to the normal case due to \cref{thm:wish-models}. The main result is due to \cite{gplvm}, which is based on \cite{ppca}.
+%
+A sketch proof using results from \cite{matrix-cookbook, minka-cookbook}:
+\begin{align}
+    &\argmax_{\X} - \frac{d}{2} \log |\C| - \frac{d}{2} \text{tr}(\Tilde{\S}\C^{-1}) \nonumber \\
+    =&\argmin_\X \log\det (\X\X^T + \sigma^2 \I) + \text{tr}\left( \hat \S (\X\X^T + \sigma^2 \I)^{-1} \right) \nonumber \\
+    \implies & 2 \C^{-1} \X - 2\C^{-1} \hat\S \C^{-1} \X = 0 \label{eqn:probdr:pca_diff} \\
+    \implies & \hat \S \C^{-1} \X = \X \nonumber.
+\end{align}
+The following results were used as part of \cref{eqn:probdr:pca_diff},
+$$d \log\det \C = \text{tr}(\C^{-1}d\C) = \text{tr}(\C^{-1}(d\X \X^T + \X d\X^T)) = 2\text{tr}(\X^T \C^{-1} d\X) $$
+and,
+\begin{align*}
+d \text{tr}(\S\C^{-1}) &= \text{tr}(\S d\C^{-1}) \\
+&= -\text{tr}(\S\C^{-1}d\C\C^{-1}) \\ 
+&= -\text{tr}(\C^{-1}\S\C^{-1}(\X d\X^T + d\X\X^T)) \\
+&= -2 \text{tr}(\X^T\C^{-1}\S\C^{-1}d\X).
+\end{align*}
+%
+We notice that the number of degrees of freedom do not change the optimum, in the Wishart case. The multivariate normal case however is different, as the dimension of the data matrix leads to the number of degrees of freedom. Following \cite{ppca}, we decompose $\X$ using an SVD,
+$$\X = \U \boldsymbol{\Lambda} \mathbf{R}^T$$
+and hence stationarity condition simplifies as,
+\begin{align*}
+    & \hat \S \U (\boldsymbol{\Lambda}^2 + \sigma^2 \I)^{-1} \boldsymbol{\Lambda} \mathbf{R} = \U \boldsymbol{\Lambda}\mathbf{R} \\
+    \implies & \hat \S \U (\boldsymbol{\Lambda}^2 + \sigma^2 \I)^{-1} \boldsymbol{\Lambda} = \U \boldsymbol{\Lambda}  && \times\mathbf{R}^T \\
+    \implies &\hat \S \U = \U (\boldsymbol{\Lambda}^2 + \sigma^2 \I).
+\end{align*}
+The result follows as the conditions read $\hat \S \mathbf{u}_j = \lambda^s_j \mathbf{u}_j$, which is an eigenvalue definition. Letting $\lambda^s_j$ be the j-th eigenvalue of $\hat \S$, we find $\lambda_j^2 + \sigma^2 = \lambda_j^s \Rightarrow  \lambda_j = \sqrt{\lambda_j^s - \sigma^2}$.
+\end{proof}
+
+\noindent This proves our covariance view. There are many other ways to motivate the solution of (dual-probabilistic) PCA.\footnote{In the foundational work of \cite{pearson-pca}, the problem is motivated as finding best fitting lines to points in space, in \cite{hotelling-pca} as directions of maximal variance. \cite{gplvm} show that a KL-minimisation between Gaussians can also lead to the result in addition to the maximum likelihood interpretation, and \cite{assel} show that a KL-minimisation between posteriors over precisions assuming general Gaussian generative models also leads to a dp-PCA solution when one of the variational families is constrained to be low-rank.} In our work, we look for a MAP interpretation to explicitly answer the question: ``what is the generative model behind widely used dimensionality reduction methods?'' We also choose our model family such that it unifies many DR algorithms \textbf{while bridging them with GPLVMs} as they themselves encompass many classical algorithms.
+
+Having proved our covariance view that reinterprets dual-probabilistic PCA, we now prove our precision view, which introduces dual-probabilistic MCA.
+
+\subsubsection{Dual-probabilistic MCA}
+\label{sub:dpmca}
+
+We will now prove the second Wishart statement of \cref{thm:probdr:two-step-mle},
+\begin{align*}
+    \hat{\mathbf{\Gamma}} * \nu | \mathbf{X} \sim \mathcal{W}\left((\X \X^T + \beta \I_n)^{-1}, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ min}} (\mathbf{\Lambda}^{-1}_{\q \text{ min}} - \hat \beta \I_{\q})^{1/2} \mathbf{R}^T,
+\end{align*}
+thereby completing the main theoretical claim of this section. This is a novel perspective that we term \textbf{dual-probabilistic minor components analysis}.
+
+\begin{theorem}{Dual probabilistic minor components analysis (dual-MCA)}
+\label{thm:mca}
+We present a dimensionality reduction method using the result of probabilistic minor components analysis \citep{mca}. Using this algorithm, and given an estimated/empirical precision matrix $\Tilde{\mathbf{\Gamma}}$, we find that a low dimensional embedding $\X$ by maximising objectives of the form,
+\begin{align*}
+    \argmax_{\X} \frac{\nu}{2} \log |\mathbf{P}^{-1}| - \frac{\nu}{2} \text{tr}(\mathbf{P}^{-1} \Tilde{\mathbf{\Gamma}}) + c
+\end{align*}
+with $\mathbf{P}^{-1} := \X\X^T + \beta \I_{n} $ is attained at the minor scaled eigenvectors of the estimator,
+$$ \hat{\X} = \mathbf{U}_{\q} (\mathbf{\Lambda}^{-1}_\q - \hat \beta \I_{\q})^{1/2} \mathbf{R}^T, $$
+where $\hat \beta = \frac{n - \q}{\sum_{i=\q+1}^{n} \lambda_i}$ and $\mathbf{U}_\q \text{ and } \mathbf{\Lambda}_\q$ are the matrices of $\q$ minor eigenvectors and eigenvalues of $\Tilde{\mathbf{\Gamma}}$. Dual minor components analysis is maximum a-posteriori inference given the model,
+$$
+    \nu*\Tilde{\mathbf{\Gamma}} | \mathbf{X} \sim \mathcal{W}\left((\X \X^T + \beta \I_n)^{-1}, \nu\right)
+$$
+where $\Tilde{\mathbf{\Gamma}}$ is an empirical precision matrix, for example, calculated\footnote{If the covariance matrix $\hat \S$ is low rank, then $\Tilde{\boldsymbol{\Gamma}}$ can be set to its pseudo-inverse.} as $\Tilde{\mathbf{\Gamma}} = (\Y\Y^T/d)^{-1}$.
+\end{theorem}
+%
+\begin{proof} of \cref{thm:mca}. 
+The result is based on the result of \cite{mca}, and follows directly from a flip in notation (for instance $\X \rightarrow \X^T$). The result can also be sketched out as follows.
+\begin{align*}
+\mathcal L &\overset{+}\propto -\log |\mathbf{P}^{-1}| + \text{tr}(\mathbf{P}^{-1} \Tilde \Gamma) \\
+\argmin_\X \mathcal L \implies \dfrac{d\mathcal L}{d\X} &= -\dfrac{d}{d\X} \log\det(\X\X^T + \hat \beta \I) + \dfrac{d}{d\X} \text{tr}(\Tilde \Gamma (\X\X^T + \hat \beta \I)) = 0 \\
+&\implies (\X\X^T + \hat \beta \I)^{-1} \X = \Tilde{\boldsymbol{\Gamma}} \X \\
+&\implies \hat \S (\X\X^T + \hat \beta \I)^{-1} \X = \X.
+\end{align*}
+This is the same stationarity condition as dp-PCA with $\hat \S = \Tilde{\boldsymbol{\Gamma}}^{-1}$, and the solution follows. The probabilistic interpretation of the objective in \cref{thm:mca} follows trivially as it is the likelihood of the models in \cref{thm:wish-models} with $\Tilde{\T} = \Tilde{\mathbf{\Gamma}}$.
+\end{proof}
+
+\noindent Dual probabilistic minor components analysis is the second statement of \cref{thm:probdr:two-step-mle}, hence completing the proof of our main statement.
+
+Unlike in the case of dual-probabilistic PCA, where the model statement $\S \sim \mathcal W(.)$ arises naturally as the sampling distribution of the covariance ($\hat \S = \Y\Y^T/d$, where $\Y \sim \mathcal{MN}(\boldsymbol{0}, \Sigma, \I_d)$), the sample precision matrix of such a random matrix does not in general follow a Wishart distribution.
+
+Nevertheless, before we close our subsection on proofs, we show below that if we use the inverse of a sample covariance to estimate the precision matrix, the embeddings found by the covariance and precision views are effectively identical, regardless of which method is chosen. This shows that even when a model is misspecified, one can expect to obtain semantically consistent results within this model class, and that there is no strange edge-behaviour.
+
+\subsubsection{Dual-probabilistic PCA via dual-probabilistic MCA}
+
+Below, we show that dual-probabilistic PCA and dual-probabilistic MCA obtain embeddings that are similar, differing only by a multiplicative factor (they are in fact equivalent when the noise level tends to zero), even though they are not equivalent probabilistic statements\footnote{The equivalent statement for dp-PCA would involve describing the precision using an inverse-Wishart,
+\begin{align*}
+\underbrace{\mathbf{\Gamma} | \X \sim \mathcal{W}^{-1}\left((\X\X^T + \beta \I)^{-1}, d \right)}_{\text{equivalent to dp-PCA}} \text{ and not }
+\underbrace{\mathbf{\Gamma} | \X \sim \mathcal{W}\left((\X\X^T + \beta \I)^{-1}, d \right)}_{\text{dp-MCA}}.
+\end{align*}}. This forms a proof of our framework being ``correct'' under transformation (inversion) of the statistic. The idea below is simple; the precision and covariance share major and minor eigenvectors respectively, when they are related by a (pseudo-)inverse. Dp-PCA estimates the covariance, and dp-MCA estimates the precision, therefore, the major eigenvectors of the covariance recovered by dp-PCA are the minor eigenvectors of the precision recovered by dp-MCA.
+
+\begin{lemma}[Equivalence of probabilistic PCA and probabilistic MCA]
+Let $\Tilde{\S} := \S/d := \Y\Y^T/d $ and $ \Tilde{\mathbf{\Gamma}} := \mathbf{\Gamma} / d := \Tilde{\S}^{-1} $. The matrices $\Tilde{\S} \text{ and } \Tilde{\mathbf{\Gamma}}$ share eigenvectors, represented by the matrix $\U_\q$ and their diagonal eigenvalue matrices are $\mathbf{\Lambda}_{\tilde{\S}}$ and $\mathbf{\Lambda}_{\tilde{\S}}^{-1}$ respectively. Then, the estimated embeddings of the dp-PCA and dp-MCA models are related by a diagonal multiplicative factor, and the covariance estimates (i.e. the matrix $\X\X^T + \text{coef}\cdot \I$) found are identical in form,
+\begin{align*}
+    \S | \X &\sim \mathcal{W}\left( \X\X^T + \sigma^2 \I, d \right), \quad \mathbf{\Gamma} | \X \sim \mathcal{W}\left((\X\X^T + \beta \I)^{-1}, d \right)
+\end{align*}
+\label{thm:mca_pca_equiv}
+\end{lemma}
+\begin{proof} of \cref{thm:mca_pca_equiv}.
+The proof is due to \cref{thm:pca} and \cref{thm:mca}. In dp-PCA,
+$$ \hat{\S}_{\text{PCA}} = \hat{\X}\hat{\X}^T + \hat{\sigma}^2 \I_n = \U_\q (\mathbf{\Lambda}_{\hat{\S}} - \hat\sigma^2\I) \U_\q^T  +\sigma^2 \I_n = \U_\q \mathbf{\Lambda}_{\hat{\S}} \U_\q^T + \hat\sigma^2 (\I_n - \mathbf{P}), $$
+where $\mathbf{P} = \mathbf{U}_\q\mathbf{U}_\q^T$ is a projector and in dp-MCA,
+$$ \hat{\S}_{\text{MCA}} = \hat{\X}\hat{\X}^T + \hat{\beta} \I = \U_\q (\mathbf{\Lambda}^{-1}_{\hat{\mathbf{\Gamma}}} - \hat\beta\I_\q) \U_\q^T + \hat{\beta} \I_n = \U_\q \mathbf{\Lambda}_{\hat{\S}} \U_\q^T + \hat\beta(\I_n - \mathbf{P}), $$
+which differs from the dp-PCA solution by $(\hat\sigma^2 - \hat\beta)(\I - \P)$, which will be close to a diagonal matrix with large $n$, as the elements of the eigenvectors scale as $1/\sqrt{n}$ (for them to be orthonormal), and the elements of the projector therefore scale as $1/n$.
+\end{proof}
+\noindent Although the embedding estimates are the same, the noise levels are not, and therefore, using the misspecified model (i.e. the Wishart placed on the precision matrix) results in a biased estimator of the unexplained variance.
+\begin{theorem}[Estimated noise level in dp-PCA and dp-MCA]
+    The estimated noise level in dp-MCA $\hat{\beta}$ is lower than its counterpart in dp-PCA $\hat{\sigma}^2$,
+    $$ \hat{\beta} \leq \hat{\sigma}^2. $$
+    Proved in \cref{app:proofs:noise-lvl}.
+\label{thm:beta_vs_sigma_sq}
+\end{theorem}
+\noindent Therefore, even when using a misspecified model (dp-MCA\footnote{Dp-MCA can have a normal factorisation and therefore be correctly specified, when a factor of the precision matrix is assumed to be normally distributed. If,
+$\text{In}(\Y) \sim \mathcal{MN}(0, \Sigma^{-1}, \I_d),$
+where $\boldsymbol \Gamma := \text{In} \text{In}^T$, then $\boldsymbol{\Gamma} \sim \mathcal W(\boldsymbol\Sigma^{-1}, d)$. In can represent an incidence matrix.} used in place of dp-PCA), we have shown the embeddings to be at least proportional to those of dp-PCA, ensuring a form of logical consistency.
+
+This concludes our subsection on proofs of dp-PCA and dp-MCA that make up the core theoretical claim of the linear ProbDR cases. In the next and final subsection, we show how various DR algorithms used in practice fit into our framework.
+
+\subsection{Explaining eigendecomposing algorithms as linear ProbDR}
+\label{probdr:lin:connections}
+
+In the previous section, we proved that ideas of dp-PCA and dp-MCA underpin the core claim of the section, that embeddings found through eigendecomposition may be related to the models,
+\begin{align*}
+    \hat{\mathbf{\S}} * \nu | \mathbf{X} \sim \mathcal{W}\left(\X \X^T + \sigma^2 \I_n, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ maj}} (\mathbf{\Lambda}_{\q \text{ maj}} - \hat \sigma^2 \I_{\q})^{1/2} \mathbf{R}^T \\
+    \hat{\mathbf{\Gamma}} * \nu | \mathbf{X} \sim \mathcal{W}\left((\X \X^T + \beta \I_n)^{-1}, \nu\right) \quad &\Rightarrow \quad \hat{\X}_{\text{MAP}} = \mathbf{U}_{\q \text{ min}} (\mathbf{\Lambda}^{-1}_{\q \text{ min}} - \hat \beta \I_{\q})^{1/2} \mathbf{R}^T.
+\end{align*}
+In this section, we show how many dimensionality reduction algorithms arise as inference algorithms within ProbDR or as trivial extensions thereof. By doing so, we exemplify that many algorithms used in practice have probabilistic interpretations within the same model framework, the main claim of the thesis. Many algorithms use unscaled eigenvectors of the PSD matrices they form, whereas our interpretations yield latents scaled by a diagonal eigenvalue-related matrix. This difference is insignificant for most use-cases, and our results are thus approximate in light of this difference.
+
+We categorise the results that follow as,
+\begin{itemize}
+    \item methods that define a covariance-like matrix and obtain major eigenvectors as an embedding, such as dp-PCA, GPLVM CMDS, Isomap, kPCA and MVU.
+    \item methods that define a graph Laplacian and obtain minor eigenvectors as an embedding, such as Laplacian Eigenmaps and LLE.
+    \item Diffusion maps, that uses eigenvectors of a matrix that is not PSD.
+\end{itemize}
+We start with methods that estimate covariance-like matrices.
+
+\subsubsection{Algorithms that eigendecompose covariance-like matrices}
+
+Here, we show that the CMDS, Isomap, kernel PCA and MVU algorithms first calculate a similarity matrix $\mathbf{K}$, which is either PSD or nearly PSD, and obtain an embedding through eigendecomposition, retaining the eigenvectors corresponding to the largest eigenvalues. The connection to our framework is then clear, as we described our linear ProbDR cases as models for algorithms that use eigendecomposition for inference. The only difference between algorithms stems from how the covariance statistic is computed. We also show that GPLVMs and projective methods fall into this view.
+
+\paragraph{Classical multidimensional scaling} CMDS was introduced by \cite{torgerson-cmds} and described in \cite{gower-cmds} as the dual of classical principal component analysis. CMDS is motivated by the fact that a double-centred negative distance matrix,
+$$\mathbf{K} = -0.5 \H\mathbf{D}^2\H,$$
+if PSD of rank $r$, can be considered a Gram matrix; in other words, an isometric Euclidean embedding $\Y$ exists, with $\Y \in \mathbb R^{n \times r}$, such that $\mathbf{K} = \Y\Y^T$ \citep{psd-props}. Using a loss function that minimises squared residual distances between this distance matrix and one constructed using latent variables $\X \in \mathbb R^{n \times \q}$,
+$$ \mathcal{L}_{ij} = \left(\mathbf{D}_{ij}^2 - \|\X_i - \X_j\|^2 \right)^2 $$
+results in a solution that sets $\X$ to the top $\q$ eigenvectors of $\mathbf{K}$ \citep{isomap}.
+%
+
+\paragraph{Isomap} Other methods, such as the Isomap algorithm introduced by \cite{isomap}, use distance matrices constructed using non-Euclidean distance metrics. The Isomap algorithm $\mathbf{D}$ to be shortest path distances on a nearest-neighbour graph constructed using the high-dimensional data $\Y$. Then, an embedding is obtained using the method of MDS as above; by obtaining $\q$ major eigenvectors of the matrix $\mathbf{K} = -0.5 \H \mathbf{D}^2\H$.
+
+Algorithms such as Isomap have natural scientific use-cases, shown by \cite{gdfuzz} who introduce the algorithm as GDFuzz3d. Within the context of protein structure prediction, we may have access to a \textit{contact map}---a symmetric adjacency matrix showing which two amino acids of a protein sequence are ``in contact''.\footnote{This is typically an indicator function activated if the distance between two C$\alpha$ atoms is less than a thresholding value. Classically, contact maps were based on mutual-information based studies, or calculating sparse-precisions between mutations based on multiple sequence alignments (using GLASSO; \cite{psicov}). More recently, their estimation has followed studying attention matrices in neural models, or fitting logistic regressions to true contact maps using representations of protein language models (e.g. see \cite{esm2}).} Using the process above, we can calculate $\mathbf{K}$ using graph distances, to find three-dimensional coordinates corresponding to the protein backbone. Unlike many real-world cases, this is an example of a case-study where the underlying latent dimensionality is known a priori.
+
+Although the similarity matrices $\mathbf{K}$ that use non-Euclidean distance metrics are not guaranteed to be PSD, we restrict our search to eigenvectors corresponding to non-negative eigenvalues, which gives us the ``nearest'' Euclidean embedding is found that reconstructs the distance matrix in a lowest squared-error sense.
+
+\paragraph{Kernel PCA} kPCA, introduced by \cite{kpca}, replaces the Gram matrix obtained with dual-PCA $\mathbf{K} = \Y\Y^T/d$ with a kernel acting on data points $i$ and $j$, and typically centres the resulting matrix so that the features implied by the kernel are centred;
+$$ \Tilde{\mathbf{K}}_{ij} = k(\Y_i, \Y_j), \quad \mathbf{K} = \H \Tilde{\mathbf{K}} \H,$$
+with the idea that the kernel introduces a non-linear feature map of a much higher dimensionality than the data. The embedding is found as the major eigenvectors of $\mathbf{K}$ as above. Naively setting $\Tilde{\mathbf K}_{ij} = \exp(-d_{ij}^2)$ for example, where $d$ is a non-Euclidean distance can also result in a non-PSD similarity matrix \citep{non-psd-covars}.\footnote{Covariance kernels can be defined on specific manifolds in question \citep{matern-kern-mf}.} Therefore, the restriction of the embedding to eigenvectors corresponding just to non-negative eigenvalues applies here too.
+
+\paragraph{Maximum variance unfolding} MVU introduced by \cite{mvu} estimates $\mathbf{K}$ by maximising $\text{tr}(\mathbf{K})$ under PSD, centring and local isometry constraints. The embedding is then found as the eigenvectors of $\mathbf{K}$ corresponding to the largest eigenvalues.
+
+We now propose that these methods are all examples of the covariance view of linear ProbDR.
+
+\begin{proposition}
+    CMDS, Isomap, kPCA and MVU all construct a (near-)PSD matrix $\mathbf{K}$ and obtain an embedding as the major eigenvectors of $\mathbf{K}$. Therefore, they correspond to inference within our covariance view,
+    $$ \nu*\mathbf{K} \sim \mathcal{W}(\X\X^T + \sigma^2\I, \nu), $$
+    with the specification of $\mathbf{K}$ depending on the algorithm being interpreted.
+\end{proposition}
+
+\noindent Before closing these results, we remark that GPLVMs and projective methods also fit into this view.
+
+\paragraph{GPLVM} Linear factor methods described in \cref{chp:gen-bck} that perform full-form inference for the latents $\X$, such as dual-probabilistic PCA, in addition to non-linear latent factor models GPLVMs, assume a model,
+$$ \Y | \X \sim \mathcal{MN}(0, K(\X, \X), \I_d), $$
+where the covariance $\hat \S$ is a sufficient statistic, and with additional priors that constrain the nature of the embedding. The sampling distribution of the covariance is Wishart, and hence, inference follows maximum a-posteriori for the latents $\X$ assuming the model,
+$$ \S | \X \sim \mathcal{W}(K(\X, \X), d), $$
+with $\S = \Y\Y^T$ along with the same priors over $\X$ as assumed initially. This is the covariance view of the ProbDR framework, with a linear or non-linear kernel depending on the choice of covariance kernel $K$.
+
+\paragraph{Projective methods} Consider a mapping $\X = \Phi(\Y)$. We show that this can be seen a mode given the model,
+$$ \nu*\hat\S | \X \sim \mathcal{W}(\X\X^T + \beta \I, \nu), $$
+where $\hat\S = \Phi(\Y) \Phi(\Y)^T + \beta \I$. Consider the stationarity condition that arises assuming the dual-probabilistic PCA and MCA models,
+\begin{align*}
+    \hat\S^{-1} \X = (\X\X^T + \beta \I_n)^{-1}\X \Rightarrow (\Phi \Phi^T + \beta \I_n)^{-1} \X = (\X\X^T + \beta \I_n)^{-1}\X
+\end{align*}
+This is attained if $\X = \Phi(\Y)$, showing that projective methods can also be seen through our framework.
+
+Next, we turn our attention to algorithms that obtain embeddings as \textbf{minor eigenvectors of a graph Laplacian}, instead of major eigenvalues of a covariance-like matrix as the algorithms thus far.
+
+\subsubsection{Algorithms that eigendecompose precision-like matrices}
+\label{subsec:lap-eigenmaps}
+
+Here, we detail the Laplacian Eigenmaps and Locally Linear Embedding algorithms, and show that they estimate an embedding through the minor eigenvectors of a precision-like matrix. As before, the connection to ProbDR will then become clear. We will also describe the properties of the graph Laplacian that makes it a suitable estimator for a precision matrix.
+
+\paragraph{Laplacian Eigenmaps} Laplacian Eigenmaps introduced by \cite{lap-eigenmaps} generates a (potentially weighted) graph Laplacian matrix and sets the embedding to be the $\q$ eigenvectors corresponding to the smallest eigenvalues, that are a result of the generalised eigenvalue problem,
+$$ \L \mathbf{v} = \lambda \mathbf{Dv} \quad \text{equivalently,} \quad \mathbf{D}^{-1/2}\L\mathbf{D}^{-1/2} \mathbf{x} = \lambda \mathbf{x}. $$
+The method of Laplacian Eigenmaps is justified due to a least-squares view, to find vectors $\mathbf{x}$ such that $\sum_{ij} \A_{ij}(\mathbf{x}_i - \mathbf{x}_j)^2$ is minimised but such that $\|\mathbf{x}\|^2=1$. This leads to an objective $\mathcal L = \text{tr}(\X^T \L \X)$ with orthonormality constraints on $\X$, (which can immediately be read off as the data dependent term of the dp-MCA likelihood, \cref{thm:mca}).
+
+\paragraph{Locally Linear Embedding} \cite{neil-gmrf} interprets the LLE algorithm \citep{lle} to first perform inference on ``reconstruction weights'' $\mathbf{W}$ via pseudolikelihood optimisation with a Gaussian Markov random field (GMRF) model,
+$$ \forall i: \Y_{i:} | \Y_{-i} \sim \mathcal N \Big( -{\mathbf{W}^{-1}_{ii}} \sum_{j \in \mathcal N(i)} \mathbf{W}_{ji}\Y_{j:}, {\mathbf{W}_{ii}^{-2}}\Big),$$
+where $\mathbf{W}_{ii} = -\sum_{j\in \mathcal N(i)} \mathbf{W}_{ji}$ (although in LLE, this is constrained to be 1) and $\forall j \not \in \mathcal N(i): \mathbf{W}_{ji} = 0$ and we expect that $\forall j \in \mathcal N(i), \mathbf{W}_{ji} < 0$. 
+This leads to an objective of the form $\mathcal L(\mathbf{W}_i^T) = \| \Y_i - \sum_{j \in \mathcal N(i)} \Y_j \mathbf{W}_{ji} \|^2 $. Once these weights have been found, an embedding $\X$ is found that optimises a similar objective, $\mathcal L = \sum_i \| \X_i - \sum_{j \in \mathcal N(i)} \X_j \mathbf{W}_{ji} \|^2 $, which is solved using an eigenvalue problem.
+Therefore, setting the graph Laplacian $\L = \hat{\mathbf{\Gamma}}(\Y) = \mathbf{W} \mathbf{W}^T$ as in \cite{neil-gmrf} and \cite{lap-eigenmaps} recovers LLE as a case of Laplacian Eigenmaps.
+
+\begin{proposition}
+    Laplacian Eigenmaps and LLE construct a graph Laplacian matrix $\L$ that may be weighted and/or normalised, and obtain an embedding as the minor eigenvectors of $\L$. Therefore, they correspond to inference within our precision view,
+    $$ \nu*\L | \X \sim \mathcal{W}\left(\left(\X\X^T + \beta\I\right)^{-1}, \nu\right), $$
+    with the specification of $\mathbf{K}$ depending on the algorithm being interpreted.
+\end{proposition}
+
+We will now review the implications of the model, by studying what problem Laplacian Eigenmaps solves, and the role of a graph Laplacian as an estimator of a precision matrix.
+
+Embeddings used for spectral clustering, e.g. those described in \cite{shi-malik, graph-tutorial} which are motivated by finding an approximate solution to the minimal graph-cut problem, are nearly identical to Laplacian Eigenmaps. Given a graph, the graph-cut problem aims to find a partition that splits the graph into two, with each group, as an example, having maximum interconnected-ness. These ideas provide a semantic statement for what the embeddings recovered from such an algorithm/model correspond to; as dp-PCA can be thought to recover directions of maximal variation (or possibly slow modes of variation), and as ICA can be thought to recover disentangled signals, the model underpinning Laplacian Eigenmaps can be thought to recover coordinates that best separate the data graph by latent clusters.
+
+Next, we study the Laplacian matrix as (part of) a precision matrix. Graph Laplacians (or matrices with their sparsity structure) commonly appear as precision matrices within models.\footnote{Such as, in intrinsic conditional autoregressive models (ICAR models, \cite{icar}). \cite{icar} show that the Gibbs-like specification of marginals does not necessarily lead to a consistent joint distribution, but does in the case of ICAR-like models. Furthermore, precision matrices can be built (obeying a discretisation of a manifold) which lead to the resulting covariance being Mat\'ern \citep{rue-lindgren}.} The graph Laplacian satisfies many of the expected properties of a precision matrix, for example,
+\begin{enumerate}
+    \item It is positive semidefinite.
+    \item When an off-diagonal element is non-zero and negative, the two corresponding random variables are known to be conditionally dependent with a positive correlation. Concretely, assume a random vector $\mathbf{x}$ indexed by $\Omega$ and distributed as $\mathbf{x}_\Omega \sim \mathcal{N}(0, \boldsymbol{\Gamma}^{-1})$.
+    \begin{enumerate}
+        \item The normalised precision matrix $\bar{\boldsymbol{\Gamma}}$ is such that $\bar{\boldsymbol{\Gamma}}_{ij} = 0 \Leftrightarrow i \perp j | \{\Omega \setminus ij\} $. In words, $\mathbf{x}_i$ and $\mathbf{x}_j$ are conditionally independent given the other part of the random vector.
+        \item $\bar{\boldsymbol{\Gamma}}_{ij} < 0 \Leftrightarrow \text{Cor}(\mathbf x_i, \mathbf x_j | \mathbf x_{\Omega \setminus ij}) > 0$ (\cite{graphical_md}, Section 5.1.3).
+    \end{enumerate}
+    The graph Laplacian also shares these properties, as when two points are adjacent, its off diagonal elements are negative, and zero otherwise.
+    \item A Bayesian network's precision matrix shares the same sparsity pattern as the associated moralised graph Laplacian \citep{moral-dag}.
+\end{enumerate}
+Therefore, the graph Laplacian functions as an estimator of a precision matrix. The degrees of the graph Laplacian also have ties to data density.\footnote{For random walks on the graph, the stationary distribution is proportional to the degree vector \citep{graph-tutorial}, and if the graph Laplacian is built using a kernel as in diffusion maps, then the degree vector encodes the data points' kernel density estimate \cite{diff-maps}.}
+
+An implication of using the GL as a precision matrix is that it is a function of \textit{just} the data's (nearest-)neighbour graph, we posit that it may be a lossy estimate of certain data characteristics. Research into understanding what features are extracted at a high-level by the various covariance estimators in this chapter will shed light on the best circumstances for the usage of each of the methods discussed. A question that arises is, to what extent nearest-neighbour graphs of highly zero inflated distributions (often seen in science), are solely functions of zero-occurrence rates. We note this in light of the observation that visualisation algorithms based on the neighbour graph can be somewhat robust to binarisation of the data, illustrated in \cref{fig:binarisation}. We see that for a particular scRNA-seq dataset, binarising the data matrix does not have a catastrophic effect on the resultant embeddings. Conversely, there are cases (such as the case-study in \cref{app:cases:pb}) where clustering in the data is not found in its dominant-variance components. Therefore an open question remains as to how similarity measures for such cases should be constructed.\footnote{A line of work in this direction can be found in the work of \cite{srcc-retains-ggr}, who show that measures of proportionality (a statistically non-standard similarity estimator) yield gene–gene networks that better recover known biological structure than the sample correlation in scRNA-seq datasets.}
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.45\linewidth]{figures/other_bck/binar_before.png}
+    \includegraphics[width=0.45\linewidth]{figures/other_bck/binar_after.png}
+    \caption{Cell-type embedding positions are largely retained even when the underlying data is binarised, reflecting simply that the zero-occurrence rates explain a large part of the visualisation, which is based on just the data's nearest neighbour graph.}
+    \label{fig:binarisation}
+\end{figure}
+
+Before concluding these results, we point out that the model can, due to the equivalence of dp-PCA and dp-MCA, be written in terms of a covariance. In fact, \cite{neil-gmrf} presents an algorithm similar to Laplacian Eigenmaps that instead chooses the top eigenvectors of a covariance-like matrix, $\hat{\S}(\Y) = \mathbf{H} (\L + \gamma \I)^{-1} \mathbf{H}$. In part, this can be motivated by the fact that Laplacian Eigenmaps discards the constant eigenvector corresponding to zero eigenvalues, \textbf{which is not done} in our precision view. Choosing this definition of covariance yields the following result,
+$$ \hat\S = \H (\L + \gamma \I)^{-1} \H \overset{\text{eig}}= \H \U (\gamma\I + \boldsymbol{\Lambda})^{-1} \U\H \overset{\gamma \rightarrow 0}\rightarrow \underbrace{\H \boldsymbol{11}^T \H}_{\mathbf 0}/n\gamma + \L^+ = \L^+ $$
+where $\L^+$ is formed by removing columns corresponding to the zero eigenvalue(s). Therefore, Laplacian Eigenmaps can also be interpreted using our dp-PCA view, employing the estimator $\hat \S(\Y) = \L^+$, which does discard the constant eigenvector.
+
+We have shown that Laplacian Eigenmaps and its extensions fall into the ProbDR framework, and that the graph Laplacian can play a meaningful role as an estimator of a precision matrix. We end our subsection by considering one last algorithm, that uses an eigendecomposition of a matrix that is not PSD, unlike the cases we presented thus far.
+
+\subsubsection{Algorithms that eigendecompose non-PSD matrices}
+\label{sec:diff-maps}
+
+This section mainly reviews the diffusion maps algorithm of \cite{diff-maps}, which uses the eigendecomposition of a transition matrix to find an embedding.
+
+\paragraph{Diffusion maps} The algorithm estimates a transition matrix assuming that each data point is a node of a graph,
+$$ \P = \mathbf{D^{-1}K},$$
+where $\mathbf{K}_{ij} = k(\Y_i, \Y_j)$ is a kernel matrix acting on the data $\Y$, and $\mathbf{D}_{ii} = \sum_k \mathbf{K}_{ik}$ left-normalises the matrix. An embedding is found such that Euclidean distances approximate diffusion distances on the graph, and hence, the embeddings are computed as the major eigenvectors of $\mathbf{P}^t$. Set $t=1$.
+
+\begin{proposition}
+The major eigenvectors of $\mathbf{P}$ are the minor eigenvectors of $\L = \I - \mathbf{D^{-1/2}K D^{-1/2}}$ (as the implied adjacency is a \textit{similar} matrix to the transition matrix), we see that the diffusion maps algorithm can be seen as a case of MAP inference within ProbDR's precision view,
+$$ \nu*\L|\X \sim \mathcal{W} \left((\X\X^T + \beta \I)^{-1}, \nu \right). $$
+\end{proposition}
+
+We will briefly review the interpretation of the graph Laplacian used in this context. A slightly different construction presented of the transition matrix, that is also presented by \cite{diff-maps} is as follows: first, a normalised kernel matrix is constructed as $\mathbf{W} = \mathbf{D}^{-1}\mathbf{K}_\epsilon\mathbf{D}^{-1}$, where $\mathbf{K}_\epsilon$ is calculated using distances scaled with a factor of $1/\epsilon$. Then, a transition matrix is constructed as $\Tilde{\mathbf{P}} = \mathbf{\Tilde{D}}^{-1}\mathbf{W}$, where $\Tilde{\mathbf{D}}_{ii} = \sum_k \mathbf{W}_{ik}$.
+This transition matrix approximates a symmetric positive definite matrix, the heat kernel $\exp(-t\Delta)$, where $\Delta$ is the Laplace-Beltrami operator, approximated by $\L^{rw}_\epsilon = (\I - \Tilde{\mathbf{P}})/\epsilon$.\footnote{With this construction, the graph Laplacian is an analogue of the Markov chain generator.} Therefore, no matter which matrix is used for eigendecomposition, the statistic used estimates the manifold that underpins the data. Other interpretations of diffusion maps may be possible, but we detail the Wishart due to its comparability with other methods\footnote{For example, a transition matrix $\mathbf{P}$ could be modelled as a matrix normal, or more appropriately, its rows could be modelled using a Dirichlet, or Von Mises distribution with centrality parameters $\X\X^T + \sigma^2\I_n$, all of which would lead to a functional form within the log-likelihood, $\mathrm{tr}(\mathbf{P}\X\X^T)$.}.
+
+To conclude the section, we have shown that there are two main model classes, dp-PCA and dp-MCA, that we term the linear ProbDR views,
+\begin{align*}
+    \text{dp-PCA:}& \quad \nu*\hat\S|\X \sim \mathcal{W} \left(\X\X^T + \sigma^2 \I, \nu \right)  \text{ and,}\\
+    \text{dp-MCA:}& \quad \nu*\L|\X \sim \mathcal{W} \left((\X\X^T + \beta \I)^{-1}, \nu \right),
+\end{align*}
+that underpin many methods of dimensionality reduction that use eigendecomposition of a matrix as an embedding. We also show an equivalence between the views in the sense of the solutions they find. In the next section, we will show that t-SNE-like algorithms follow a similar generative model as our Laplacian Eigenmaps model, but with a non-linear covariance function used in place of the linear kernel.
+
+\section{Likelihood interpretations: non-linear cases}
+\label{chp:probdr-nonlin}
+
+In the previous section, we showed how the linear ProbDR model,
+$$ \nu \L | \X \sim \mathcal{W}\left( \left( \X\X^T + \beta\I \right)^{-1}, \nu \right) $$
+where $\L$ is a graph Laplacian corresponding to the data's k-NN graph, explains algorithms such as Laplacian Eigenmaps. This leads to an eigendecomposition of the estimated data covariance/precision to obtain the latent variable $\X$. In this chapter, we show that t-SNE-like algorithms are a non-linear extension of this model.\footnote{This section is based on \mecite{probdr2}.}
+
+Concretely, in this section, we show that dimensionality reduction methods that are neighbour embedding algorithms, such as UMAP and t-SNE, can be recast approximately, in the large-$n$ limit, as MAP inference methods corresponding to an almost identical model. The key modification that arises from our study of t-SNE-like algorithms is the introduction of a non-linear covariance function to the model that underpins Laplacian Eigenmaps. We assume an improper prior on the latents, $p(\X) \propto 1$, as before. The model now becomes,
+\begin{equation}
+    \label{eqn:probdr}
+    \L | \mathbf{X} \sim \mathcal W \left(\left( \X\X^T + 0.5 \H K(\X, \X) \H + \gamma \I\right)^{-1}, n \right),
+\end{equation}
+where $\L$ is an estimate of the graph Laplacian generated using the high-dimensional data $\Y \in \mathbb{R}^{n \times d}$, $\X \in \mathbb R^{n \times \q}$ corresponds to the set of low ($\q$-)dimensional latent variables, and $K$ is a covariance function (the Cauchy/Student-t/rational quadratic kernel) used to construct a positive-definite matrix using latent variables.
+
+This enables a direct comparison between algorithms such as Laplacian Eigenmaps, t-SNE and UMAP. Our interpretation offers deeper theoretical and semantic insights into such algorithms and forges a connection to Gaussian process latent variable models by showing that well-known kernels can be used to describe covariances implied by the graph Laplacian.
+
+We also show that a precursor interpretation of our methods is a simple edge detection model,
+\begin{equation*}
+    \A_{ij} | \X \sim \text{Bernoulli} \left( \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right),
+\end{equation*}
+where the adjacencies of the kNN graph are described directly with a Bernoulli distribution, using distances between the latent variables to describe the probabilities of adjacency.
+
+After presenting our main interpretation, we show that the models correspond to meaningful assumptions, and that they are coherent under transformations (i.e. when we switch from the Bernoulli to the Wishart interpretations). To close the section, we will show how ideas from word2vec can be used for approximate but efficient inference in t-SNE-like algorithms.
+% fv: short bullet point list of contributions
+
+We now review a key result of the last section (our Laplacian Eigenmaps interpretation) and Contrastive Neighbour Embedding, which forms the foundation of our work.
+
+\subsection{Background}
+
+As a background to the main results of the section, we recap the Laplacian Eigenmaps interpretation of ProbDR as this, in a way, forms a ``linear edge-case''/limiting result of our interpretation of t-SNE-like algorithms. Then we present a key result that we use to build our interpretation; the \textbf{Contrastive Neighbour Embedding} introduced by \cite{nc_sne}, which simplifies t-SNE and UMAP. It provides the main objective function that we use to interpret t-SNE-like algorithms as models over the adjacency matrix and then, the graph Laplacian.
+
+\subsubsection{A recap of probabilistic Laplacian Eigenmaps}
+
+We briefly recap Laplacian Eigenmaps' model from the previous section. The algorithm involves the calculation of a nearest-neighbour graph using high-dimensional data points $\Y$, which can be represented using a graph Laplacian $\L = \mathbf{D} - \A$. $\A$ is the corresponding adjacency matrix, and $\mathbf{D}$ is the diagonal degree matrix, $\mathbf{D}_{ii}$ = $\sum_k \A_{ik}$). Then, the embedding $\X$ is set to the eigenvectors of $\L$ corresponding to the lowest eigenvalues. Although Laplacian Eigenmaps uses the symmetrically normalised graph Laplacian, in this section, we use the ordinary Laplacian for ease of computation and linearity in the adjacency.
+%
+In \cref{subsec:lap-eigenmaps}, we showed that this corresponds to inference for $\X$ by maximising the likelihood,
+\begin{equation}
+\label{eqn:le}
+\log \mathcal{W} \left( \nu*\L | (\X\X^T + \beta \I)^{-1}, \nu \right),
+\end{equation}
+where $\L$ can, as before, be interpreted as an estimate of a precision matrix. The model results in the implied covariance ($\L^+$) being modelled using a linear covariance function acting on the latents $\X$, which is familiar in models such as dual probabilistic PCA and GPLVM.
+
+As an example of visualisations that are obtained from using Laplacian Eigenmaps, \cref{fig:lap-eigenmaps} shows embeddings of three datasets; the first corresponding to 10k vectorised MNIST digits \citep{mnist}, and the rest corresponding to embeddings of transcriptomics datasets\footnote{The datasets were accessed using the openTSNE repository \citep{opentsne}. We resample each dataset so that it has exactly 10 groups to aid visualisation, with up to 10k points in total. The optimisation was done using an A100 GPU with 80 GiB of GPU memory, using pytorch's Adam optimiser \citep{adam}, with an initial learning rate set to 1.0. Each experiment was run for 100 epochs, with linear rate decay.} from \cite{macosko} and \cite{zheng}. The figure illustrates that clustering is achieved by data-point type, and that the embeddings are ``sharp'' or ``pointed''.
+
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_le.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/macosko_le.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/zheng_le.png}
+\end{minipage}
+\end{tabular}
+\caption{Comparison between embeddings obtained using our Laplacian Eigenmaps, across different datasets, showing clustering by data type. Tasks, left to right: clustering of MNIST digits, and cells from two transcriptomic datasets.}
+\label{fig:lap-eigenmaps}
+\end{figure*}
+
+Next, we review the contrastive neighbour embedding framework, which provides an objective that forms the basis of our interpretations.
+
+\subsubsection{Contrastive neighbour embedding}
+\label{subsec:cne}
+
+We now present the contrastive neighbour embedding (CNE) framework, which provides a clear objective, when optimised, leads to t-SNE and UMAP-like behaviour. This provides the central objective which we interpret in this section, allowing for links to be drawn between t-SNE-like algorithms, GPLVMs and ProbDR.
+
+UMAP and t-SNE are defined as KL-minimising algorithms and can easily be interpreted in a variational framework (described briefly later in the chapter), acting on a binary adjacency matrix $\A'$. If the variational probabilities are one or zero, signifying whether two points are nearest neighbours or not, the interpretation becomes equivalent to MAP estimation\footnote{A sketch: $\text{KL}_{\text{categorical}}( q \| p) = \sum_i q_i \log \left( \dfrac{q_i}{p_i} \right) \overset+= -\sum_i q_i \log p_i = -\sum_i a_i \log p_i = -\log \text{Categorical}(\mathbf{a}|\mathbf{p}). $} \citep{nc_sne, probdr}.
+
+This simplification can be made due to the findings of \cite{umap_loss}, who show that the relatively complex calculation of the variational probabilities in t-SNE and UMAP can be replaced with simply the adjacency matrices without significant loss of performance.
+%
+\cite{nc_sne}, however, show that the optimisation process is equally important. As part of an extensive study on the nature of the t-SNE and UMAP loss functions, they show how the stochastic optimisation of t-SNE and UMAP is contrastive estimation with the objective function (which is maximised)\footnote{We modify the presentation of the statement, and approximate certain quantities; a derivation of the form of the CNE objective we present from what appears in \cite{nc_sne} can be found in \cref{app:proofs:cne}.},
+\begin{align}
+\label{eqn:cne-bound}
+    \mathcal{E}(\X) &\propto \underbrace{\sum_{ij} \A_{ij} \log\left(\frac{1}{d_{ij}(\X)^2 + 1}\right)}_{\mathcal{T}_a} + \underbrace{\dfrac{4n_{\text{neg}} n_{\text{neigh}}}{3n}\sum_{ij} (1 - \A_{ij}) \log\left(1 - \frac{1}{d_{ij}(\X)^2 + 1}\right)}_{\mathcal T_b},
+\end{align}
+where $\A_{ij}$ represents whether data points $\Y_i$ and $\Y_j$ are neighbours, and $d_{ij}^2(\X) = \| \X_{i:} - \X_{j:} \|^2$. We will refer to this as the \textbf{CNE objective}. The hyperparameter $n_{\text{neg}}$ sets the number of contrastive negatives (set to be five) that affects the strength of repulsion, and $n_{\text{neigh}}$ corresponds to the number of neighbours set for a point (fifteen in this work).
+
+In \cref{fig:cne-plots}, we visualise embeddings obtained using CNE on the MNIST and transcriptomics dataset used previously. We see that the embeddings are more compact, diffuse and easier to visualise.
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_cu.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/macosko_cu.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/zheng_cu.png}
+\end{minipage}
+\end{tabular}
+\caption{Comparison between embeddings obtained using CNE, across different datasets, showing clustering that is more diffuse than Laplacian Eigenmaps, and is easier to visualise. Tasks, left to right: clustering of MNIST digits, and cells from two transcriptomic datasets.}
+\label{fig:cne-plots}
+\end{figure*}
+
+We will work with this objective and aim to interpret it as a likelihood, but over the latents $\X$. The coming subsections first interpret this objective as an approximate Bernoulli likelihood describing the distribution of the k-nearest neighbour graph as an intermediary step. Then, using these results, we interpret the objective as a Wishart likelihood over the graph Laplacian to relate t-SNE-like methods to the earlier interpretations of ProbDR. This will therefore tie major dimensionality reduction methods as inference algorithms in one framework. Finally, to close the section, we will argue that the interpretations are semantically consistent, reinforcing the claim made in the introduction that the framework behaves correctly under certain transformations of the observed sufficient statistic.
+
+\subsection{Towards a distribution of the knn-graph}
+
+As an intermediary step towards the Wishart distribution that will describe t-SNE-like algorithms, in this subsection, we prove the following result.
+\begin{theorem}[Bernoulli interpretation of CNE]
+A Bernoulli distribution over the edges of a graph, that uses a kernel to describe the probabilities as an inverse monotonic function of the latent distances, explains UMAP and t-SNE-like algorithms
+\begin{equation}
+    \label{eqn:bern-interp}
+    \A_{ij} | \X \sim \text{Bernoulli} \left( \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right),
+\end{equation}
+where $\Tilde{\epsilon} = 4n_{\text{neg}} n_{\text{neigh}}/3n$.
+\end{theorem}
+\begin{proof}
+The objective we derived in \cref{eqn:cne-bound} is not a likelihood due to the multiplicative constant weighting the contributions of points that are not adjacent. The second term, $\mathcal T_b$, can be expressed as follows,
+\begin{align*}
+    \mathcal T_b &= \Tilde{\epsilon}\sum_{ij} (1 - \A_{ij}) \log\left( \left[ 1 - \frac{1}{d_{ij}(\X)^2 + 1} \right] \right) \\
+    &=\sum_{ij} (1 - \A_{ij}) \log\left( \left[ 1 - \frac{1}{d_{ij}(\X)^2 + 1} \right]^{\Tilde{\epsilon}} \right).
+\end{align*}
+%
+Assume a hypothetical Bernoulli distribution's likelihood over the adjacency matrix,
+$$\log \text{Bernoulli}(\A_{ij}|\tilde{\mathbf{p}}_{ij}) = \underbrace{\A_{ij}\log \tilde{\mathbf{p}}_{ij}}_{\mathcal{R}_a} + \underbrace{(1 - \A_{ij})\log(1 - \tilde{\mathbf{p}}_{ij})}_{\mathcal{R}_b}.$$
+Setting $\mathcal{R}_b = [\mathcal{T}_b]_{ij}$, the implied probability of adjacency $\Tilde{\mathbf{p}}_{ij}$ is,
+\begin{align*}
+    \Tilde{\mathbf{p}}_{ij} &= 1 - \left[ 1 - \frac{1}{d_{ij}(\X)^2 + 1} \right]^{\Tilde{\epsilon}} \\
+    &= 1 - \exp\left[ \Tilde{\epsilon} \log \left( 1 - \frac{1}{d_{ij}(\X)^2 + 1} \right) \right] \\
+    &= 1 - \exp\left[ -\Tilde{\epsilon} \log \left(1 + \frac{1}{d_{ij}(\X)^2} \right) \right] && 1-\dfrac1{x+1} = \dfrac{x}{x+1} = 1/\left( 1 + \dfrac1x\right) \\
+    &\approx 1 - 1 + \Tilde{\epsilon} \log \left(1 + \frac{1}{d_{ij}(\X)^2} \right) && \text{large n} \Rightarrow \exp(-\epsilon x) \approx 1 - \epsilon x.
+\end{align*}
+%
+Now, we lower bound these probabilities as follows, so that the form of our new probabilities $\mathbf{p}_{ij}$ match the first term $\mathcal T_a$,
+\begin{align*}
+    \tilde{\mathbf{p}}_{ij} &= \Tilde{\epsilon} \log \left(1 + \frac{1}{d_{ij}(\X)^2} \right) \\
+    &\geq \frac{\Tilde{\epsilon}}{1 + d_{ij}(\X)^2} := \mathbf{p}_{ij}, && \log x+1 \geq \dfrac{x}{x+1} \Rightarrow \log \left(1 + \dfrac1x \right) \geq \dfrac1{1+x}
+\end{align*}
+where the last identity is a commonly used log-identity. We see that the first term of the CNE objective (\cref{eqn:cne-bound}), $\mathcal{T}_a$, is preserved up to constants,
+$$ \mathcal{T}_a = \sum_{ij} \A_{ij} \log\left(\frac{1}{d_{ij}(\X)^2 + 1}\right) \overset+= \sum_{ij} \A_{ij} \log\left(\frac{\tilde{\epsilon}}{d_{ij}(\X)^2 + 1}\right) = \sum_{ij} \A_{ij} \log \mathbf{p}_{ij}. $$
+With the choice of probabilities $\mathbf p_{ij}$,
+\begin{align*}
+    \mathcal{T}_b &\approx \sum_{ij} (1 - \A_{ij}) \log \left(1 - \Tilde{\mathbf{p}}_{ij}  \right) \\
+    &\leq \sum_{ij} (1 - \A_{ij}) \log \left(1 - \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right) \\
+    &= \sum_{ij} (1 - \A_{ij}) \log \left(1 - \mathbf{p}_{ij} \right).
+\end{align*}
+Therefore,
+\begin{align*}
+    \mathcal{E}(\X) \leq &\sum_{ij} \A_{ij} \log\left(\Tilde{\epsilon} \frac{1}{1 + d_{ij}(\X)^2}\right) + \sum_{ij} (1 - \A_{ij}) \log \left(1 - \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right) + c.
+\end{align*}
+%
+We conclude that the CNE objective lower bounds the Bernoulli likelihood implied by the model,
+$$ \A_{ij} | \X \sim \text{Bernoulli} \left(\mathbf{p}_{ij} = \dfrac{\Tilde{\epsilon}}{1 + d_{ij}(\X)^2} \right). $$
+\end{proof}
+\noindent In words, the edge between two data points can be described by a Bernoulli distribution whose probability is inversely proportional to the latent distance between the points.\footnote{Our Bernoulli model can be used to suggest alternative quasi-likelihood inference methods; for example, we found that optimising the quasi-likelihood $\mathcal{E}=-\sum_{ij}(\A_{ij} - \tilde{\epsilon}/1+{d_\X}_{ij}^2)^2$ achieves similar visual results.}
+
+In \cref{fig:bern-plots}, we show embeddings that use optimisation of our Bernoulli likelihood on the MNIST and transcriptomics datasets, and see that the quality of the embeddings is visually similar to the embeddings obtained by CNE.
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_br.png}
+\end{minipage} &
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/macosko_br.png}
+\end{minipage} &
+\begin{minipage}{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/zheng_br.png}
+\end{minipage}
+\end{tabular}
+\caption{Comparison between embeddings obtained using our Bernoulli interpretation, across different datasets, showing that the quality of the embeddings is visually similar to the embeddings obtained by CNE. Tasks, left to right: clustering of MNIST digits, and cells from two transcriptomic datasets.}
+\label{fig:bern-plots}
+\end{figure*}
+
+Our Bernoulli model for the graph adjacency is statistically meaningful. Consider the data structure---the adjacency matrix used in t-SNE and UMAP is based on a k-nearest neighbour graph, and is such that on average, $n_\text{neigh}$ neighbours exist per data point. Therefore, the probability that a point is adjacent to another scales as $n_\text{neigh}/n$. Contrast this with the model implied probability,
+$$\mathbb E_\X (\mathbf{p}_{ij}) = \dfrac{n_\text{neigh}}{n} \dfrac{4}{3} \cdot n_{\text{neg}} \mathbb E_\X \left(\dfrac{1}{1+d_{ij}^2} \right) ,$$
+which is in line with the expected behaviour of the probability. The only difference to the expected probability of adjacency is the appearance of a kernel and the number of negatives. It may be that in full-form models, without the effect of stochasticity in mini-batch gradient descent, the number of negatives makes the model better-specified at initialisation.
+
+To recap, we showed above how UMAP can be seen as inference in a Bernoulli model, which will be an intermediate step to deriving our Wishart interpretations over the graph Laplacian. In the coming subsection, we take a short detour from our exposition that the result above can be transformed into the ProbDR modelling statement, and answer, \textbf{how are t-SNE and UMAP different}?
+
+\subsubsection{From t-SNE to UMAP}
+
+In the previous subsection, we showed that CNE, interpreted using the UMAP settings, corresponds to inference within the model,
+$$ \A_{ij} | \X \sim \text{Bernoulli} \left(\mathbf{p}_{ij} = \dfrac{\Tilde{\epsilon}}{1 + d_{ij}(\X)^2} \right). $$
+In this subsection, we make a short digression from showing how this fits into the ProbDR framework to show what the main difference between our probabilistic versions of t-SNE and UMAP is---the answer will be latent \textbf{scale}, which affects optimisation dynamics.
+
+The general form of the kernel in CNE that interpolates between their versions of t-SNE and UMAP\footnote{This corresponds to the ``NEG'' setting in CNE, as opposed to the ``UMAP'' setting used for the previous derivation. Although $\Tilde{s}=1$ produces a UMAP-like embedding with NEG, we do not provide an interpretation that interpolates between various settings of the ``NEG'' class, and provide one that interpolates between embeddings of the ``UMAP'' class to the ``NEG'' class with $\tilde s<<1$.} is,
+\begin{align*}
+    \frac{1}{1 + \tilde{s}(1+d_{ij}(\X)^2)} \text{ as opposed to the kernel used previously, } \frac{1}{1 + d_{ij}(\X)^2}.
+\end{align*}
+where $\tilde{s} = 100 n_\mathrm{neg}/n$ corresponding to the t-SNE setting. As we work in the large-$n$ limit, this scale hyperparameter is small, and therefore, approximate the kernel leading to t-SNE as,
+$1/(1+ \tilde{s} + \tilde{s}d_{ij}^2) \approx 1/(1+ \tilde{s}d_{ij}^2)$. 
+Replacing the distances $d_{ij}^2$ in the derivation above with $\Tilde{s}d_{ij}^2$, we arrive at the modified interpretation,
+\begin{equation}
+    \label{eqn:tsne-to-umap-bern}
+    \A_{ij} \sim \text{Bernoulli} \left(\Tilde{\epsilon} \dfrac{1}{1+\Tilde{s}d_{ij}^2(\X)} \right),
+\end{equation}
+noting that $\tilde s=1$ leads to UMAP-like embeddings as in the last subsection, and $\tilde s<<1$ leads to t-SNE like embeddings. 
+
+We do not perform early exaggeration; we noticed that scaling the initialisation with the inverse of the scale parameter ($\Tilde{s}$) results in qualitatively similarly embeddings as when we perform early exaggeration.
+
+\Cref{fig:umap-to-t-sne} shows the resulting embeddings evolving from t-SNE to UMAP as the scale is increased. We work with the MNIST dataset, and vary the scale parameter $\tilde{s}$ from $0.05$ to $10$ (past the UMAP setting). We divide the initialisations by the same value, so that all runs start with the same initialisation, and optimise for a hundred epochs (the illustrated effects are stronger for lower epochs). We see that the clusters drift farther with increasing scale.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=\linewidth]{figures/probdr/mnist_scale_bern.png}
+    \caption{A series of embeddings of MNIST digits showing that t-SNE-like embeddings tend to UMAP-like embeddings with increasing scale ($\tilde{s} \in [0.05, 10]$) with our modified model, $\A_{ij} \sim \text{Bern.}(\tilde{\epsilon}/1+\tilde{s}d_{ij}^2)$. The illustration shows that lower scale corresponds to embeddings that are more packed, and that the clusters drift apart with increasing scale.}
+    \label{fig:umap-to-t-sne}
+\end{figure}
+
+In the model, apart from the implicit weighting of the data and regularising terms of the likelihood, the scale parameter enforces rate of convergence through implicitly lowering the learning rate of the algorithm. At smaller scales than the minimum scale visualised, there is little change from the initialisation.
+
+This concludes our presentation of how t-SNE and UMAP differ within our Bernoulli interpretation. The interpretation of CNE as a Bernoulli distribution over edges, $\A_{ij} \sim \text{Bern.}(\tilde{\epsilon}/1+{d_\X}_{ij}^2)$ (\cref{eqn:bern-interp}), is a key result due to its simplicity. In the coming subsections however, we will go further, and show that our Bernoulli interpretation can be used to describe the approximate distribution over the graph Laplacian to enable comparability to ProbDR and GPLVMs. We will return to our Bernoulli interpretation to show that it is statistically coherent later in the section. We now present the extension of our Bernoulli interpretation to a Wishart distribution over a graph Laplacian (therefore, a ProbDR model).
+
+\subsection{Describing the graph Laplacian with a Wishart distribution}
+\label{probdr:nonlin-wish}
+
+In the previous subsection, we showed that UMAP corresponds approximately to inference assuming a model for the adjacencies of a nearest neighbour graph,
+$$ \A_{ij} | \X \sim \text{Bernoulli} \left(\mathbf{p}_{ij} = \dfrac{\Tilde{\epsilon}}{1 + d_{ij}(\X)^2} \right). $$
+In the following subsection, we finally detail how this model can be transformed into a Wishart distribution over the graph Laplacian, to place it into the ProbDR framework.
+
+Although the Bernoulli interpretation is a valid probabilistic interpretation of the CNE objective, we outline the following argument to make it comparable to the other models of ProbDR.\footnote{This can be done as exponential families share similar likelihood forms, and a Wishart interpretation, despite being over discrete matrices, may correspond to a similar misspecification as performing classification using linear regression (i.e. using the $L^2$ norm separator).} As Wishart distributions have supports over positive definite matrices, we will try to consider them as a model for the graph Laplacian $\L$ as the observed statistic.
+
+\begin{theorem}{UMAP as non-linear ProbDR}
+UMAP corresponds approximately to inference assuming our model for Laplacian Eigenmaps, with a simple non-linear extension to the covariance matrix using a Cauchy kernel,
+\begin{align}
+    \label{eqn:wish-interp}
+    \L | \X \sim \mathcal{W} \left((\X \X^T + 0.5 \H \P^u \H + 0.5\Tilde{\epsilon}^{-1}\I)^{-1}, n \right),
+\end{align}
+where $\P^u_{ij} = 1/(1 + d_{ij}^2(\X_i, \X_j))$ is the unscaled Cauchy (Student-t/rational quadratic) kernel, and $\Tilde{\epsilon} = 4n_{\text{neg}} n_{\text{neigh}}/3n$ as before.
+\end{theorem}
+\begin{proof}
+The likelihood for $\X$ implied by the Bernoulli model, $\A_{ij} \sim \text{Bern.} (\Tilde{\epsilon}/1 + d_{ij}(\X)^2)$ (\cref{eqn:bern-interp}) is,
+\begin{align}
+    \log p(\A | \X) = &\sum_{ij} \A_{ij} \log\left(\Tilde{\epsilon} \frac{1}{1 + d_{ij}(\X)^2}\right) + \sum_{ij} (1 - \A_{ij}) \log \left(1 - \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right) \nonumber \\
+    \approx &\sum_{ij} \A_{ij} \log\left(\Tilde{\epsilon} \frac{1}{1 + d_{ij}(\X)^2}\right) + \sum_{ij} \log \left(1 - \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right) && \text{large n} \nonumber \\
+    \approx &\sum_{ij} \A_{ij} \log\left(\Tilde{\epsilon} \frac{1}{1 + d_{ij}(\X)^2}\right) - \sum_{ij} \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} && \text{small } \Tilde{\epsilon} \label{eqn:pois-seed}
+\end{align}
+%
+\Cref{eqn:pois-seed} is a Poisson likelihood,
+\begin{align}
+\label{eqn:poisson-like}
+\log p(\A | \X) = \sum_{ij} \log \text{Poisson} \left(\A_{ij} \big| \mu = \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} \right).
+\end{align}
+This likelihood is noteworthy as it is a minimal form (an ablation) of the CNE objective, as it only keeps terms that are crucial for the optimisation---the adjacency attraction term and a diffusing regularisation term that's a non-linear function of the distances.
+
+In passing, we illustrate in \cref{fig:cne-diffuse} that optimising embeddings using just the regularising term ($\mathcal L= \sum_{ij} 1/(1 + d_{ij}^2(\X))$) leads to a purely diffusive behaviour.
+\begin{figure*}[ht!]
+    \centering
+    \includegraphics[width=0.3\linewidth]{figures/probdr/mnist_le.png}
+    \includegraphics[width=0.3\linewidth]{figures/probdr/mnist_diff.png}
+    \caption{Embeddings of the MNIST data using Laplacian Eigenmaps (left) used for initialisation and using \text{just} the repulsive diffusion term (right) as part of optimisation. This shows that the action of the second regularising term is mainly diffusive.
+    }
+    \label{fig:cne-diffuse}
+\end{figure*}
+
+Going back to the objective,
+\begin{align*}
+    \log p(\A | \X) &= \sum_{ij} \A_{ij} \log\left(\Tilde{\epsilon} \frac{1}{1 + d_{ij}(\X)^2}\right) - \sum_{ij} \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2},
+\end{align*}
+define for convenience,
+$$ \underbrace{\P^u_{ij} = 1/(1 + d_{ij}^2)}_{\text{(unscaled)}}, \quad \underbrace{\P^s_{ij} = \Tilde{\epsilon}\P^u_{ij}}_{ \text{(scaled)}}, \quad \underbrace{\P^{ls}_{ij} = \log \P^s_{ij}}_{ \text{(log-scaled)}}. $$
+%
+Then the objective simplifies as\footnote{Our derivation also produces a similar objective to the DK-LLE objective of \cite{dk-lle} (Lemma 4), which has gradients that are similar to those of UMAP.},
+\begin{align*}
+    \log p(\A|\X) &\approx \text{tr}(\A \P^{ls}) - \sum_{ij} \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} && \text{tr}(AB)= \sum_{ij} A_{ij}B_{ji} \\
+    &\overset+= \text{tr}((\A - \mathbf{D}) \P^{ls}) - \sum_{ij} \Tilde{\epsilon} \dfrac{1}{1 + d_{ij}(\X)^2} && \text{tr}(\mathbf{DP}^{ls}) = \sum_{ij} \mathbf{D}_{ij} \mathbf{P}_{ij}^{ls} = \underbrace{\sum_{i} \mathbf{D}_{ii}\log\Tilde{\epsilon}}_{\text{const.}}
+\end{align*}
+and we can now define the likelihood in terms of the graph Laplacian $\L$,
+\begin{align*}
+    \Rightarrow \log p(\L|\X) &= -\text{tr}(\L \H \P^{ls} \H) - \sum_{ij} \mathbf{P}^s_{ij}, && \H\L\H = \L.
+\end{align*}
+We simplify further; firstly,
+\begin{align}
+    \text{tr}(\H \mathbf{P}^s \H) &= \text{tr}\left( \left(\mathbf{P}^s - \dfrac1n \mathbf{11}^T \mathbf{P}^s\right)\left(\I - \dfrac1n \mathbf{11}^T \right) \right) \nonumber \\
+    &= \text{tr}\left( \mathbf{P}^s - \dfrac2n \mathbf{11}^T \mathbf{P}^s + \dfrac{1}{n^2}  \mathbf{11}^T\mathbf{P}^s\mathbf{11}^T \right) && \text{tr cyclic} \nonumber \\
+    &= \text{tr}\left( \mathbf{P}^s - \dfrac1n \mathbf{11}^T \mathbf{P}^s \right) && \text{tr} \left(\dfrac{1}{n^2}  \mathbf{11}^T\mathbf{P}^s\mathbf{11}^T \right) = \text{tr} \left(\dfrac{1}{n}  \mathbf{11}^T\mathbf{P}^s \right) \nonumber \\
+    &\overset+= - \sum_{ij} \mathbf{P}^s_{ij}/n. && \text{tr}(\mathbf{P}^s) = n\tilde{\epsilon} \label{eqn:trhph}
+\end{align}
+Secondly,
+\begin{align}
+    \text{tr}(\mathbf{P}^s) &= \log\det\text{expm }\mathbf{P}^s \approx \log\det(\I + \mathbf{P}^s). && \mathbf{P}^s \approx \mathbf{0} \label{eqn:expmtaylor}
+\end{align}
+We can now simplify the previously found likelihood as,
+\begin{align*}
+    \log p(\L|\X) &\overset+= -\text{tr}(\L \H \P^{ls} \H) + n \text{tr}(\H \P \H) + k && \text{using \cref{eqn:trhph}} \\
+    &\approx -\text{tr}(\L \H \P^{ls} \H) + n \text{log}| \I + \H \P \H | +k. && \text{using \cref{eqn:expmtaylor}; small } \Tilde{\epsilon}
+\end{align*}
+The matrix $\H\mathbf{P}^{ls}\H$ is PSD.\footnote{$\P^{ls}$ is conditionally positive semidefinite (CPSD; double centering a CPSD matrix makes it PSD) as $\P_{ij}$ defines a kernel, which enforces positive definiteness and an element-wise log of a PD matrix with all positive elements (and infinite divisibility) will at least be conditionally positive definite (Ex. 5.6.15, \cite{psd-mats}).}\footnote{When are element-wise functions of PSD matrices PSD? Due to the results of Schur, any polynomial with non-negative coefficients will result in the retention of positivity. Schoenberg's work showed converse results.} We will now approximate $\log \P^s_{ij}$ within the vicinity\footnote{This neighbourhood was chosen as $\Tilde{\epsilon}$ is the maximal value of $\P^s_{ij}$.} of $\Tilde{\epsilon}$ by matching the gradient and function value using an ansatz,
+\begin{align}
+    \log x &\approx ax + \dfrac{b}{x} + c \label{eqn:ansatz} \\
+    \text{\cref{eqn:ansatz}} \Rightarrow \log \tilde{\epsilon} &= a\tilde{\epsilon} + \dfrac{b}{\tilde{\epsilon}} + c,\;
+    d\cdot/dx |_{\tilde{\epsilon}} \Rightarrow \dfrac1{\tilde{\epsilon}} = a -\dfrac{b}{\tilde{\epsilon}^2},\;  d^2\cdot/dx^2 |_{\tilde{\epsilon}} \Rightarrow  -\dfrac1{\tilde{\epsilon}^2} = \dfrac{2b}{\tilde{\epsilon}^3} \nonumber \\
+    \therefore b &= -\dfrac{\tilde{\epsilon}}{2},\;  a = \dfrac{1}{2\tilde{\epsilon}},\; c = \log \tilde{\epsilon}. \nonumber
+\end{align}
+We use this ansatz because it results in a familiar kernel form;
+\begin{align*}
+\log \P^s_{ij} &\overset+\approx \dfrac{\P^u_{ij}}{2} - \dfrac{1}{2\P^u_{ij}} \overset+=\dfrac{1}{2}\left(\P^u_{ij} - \|\X_i - \X_j\|^2 \right),
+\end{align*}
+and we use the well-known result $-0.5\H\mathbf{D}^2\H = \X\X^T$ (assuming/enforcing centered $\X$) to get,
+$$ \H\P^{ls}\H \overset+\approx \dfrac{1}{2}\H\P^u\H + \X\X^T. $$
+This leads finally to the Wishart likelihood over the graph Laplacian,
+\begin{align*}
+    \Rightarrow \log p(\L|\X) &\overset+\approx -\text{tr}(\L( 0.5\H\P^u\H + \X\X^T)) + n \text{log}| \I + \H \P \H | \\
+    &\overset+= -\text{tr}(\L (0.5\Tilde{\epsilon}^{-1}\I + 0.5 \H \P^u \H + \X \X^T)) + n \text{log}| 0.5\Tilde{\epsilon}^{-1}\I + 0.5\H \P^u \H | \\
+    &\leq \log \mathcal W(\L|(0.5\Tilde{\epsilon}^{-1}\I + 0.5\H \P^u \H + \X \X^T)^{-1}, n). && \log|A + B| \geq \log|A|
+\end{align*}
+%
+Therefore, the Wishart model that underpins Laplacian Eigenmaps, extended with a non-linear kernel, approximates inference UMAP,
+\begin{align*}
+    \L | \X &\sim \mathcal{W} \left((0.5\Tilde{\epsilon}^{-1}\I + 0.5 \H \P^u \H + \X \X^T)^{-1}, n \right). && (\text{\ref{eqn:wish-interp}})
+\end{align*}
+This is a restatement of \cref{eqn:wish-interp}, completing our proof.
+\end{proof}
+\noindent This concludes the major result of this section, showing that t-SNE-like algorithms fit into the ProbDR model form.
+
+The result above provides a direct connection to the model behind Laplacian Eigenmaps as our model for UMAP is a non-linear extension of the previous section's Laplacian Eigenmaps interpretation. The Wishart model of \cref{eqn:wish-interp} also connects Gaussian processes to ProbDR, as the model implies that the implicit data covariance is modelled by a non-linear Gaussian process covariance function.
+
+The implied covariance of our model (the inverse of the Wishart's centrality parameter) is non-stationary and can be justified by the fact that the adjacency probabilities of t-SNE/UMAP-like algorithms approach zero as a function of distance, unlike what would be expected from stationary Gaussian process-like generative models.
+
+Our Wishart model uses a covariance based on a double-centred non-linear kernel, differing from the linear kernel used in the previous section. Although we retain the double centring as a result of our manipulations, removing the double centring does not lead to any significant changes to the visualised embeddings.
+
+\Cref{fig:wish-plots} illustrates embeddings of MNIST and transcriptomics datasets obtained using our Wishart interpretation. This is the main experimental validation of our interpretations: we see a t-SNE-like clustering when inference is performed using our probabilistic model. We see that the embeddings found are more diffuse than the embeddings found previously using CNE. The Wishart interpretations, though based on CNE's version of UMAP, are qualitatively similar to CNE's version of t-SNE, illustrated side-by-side in \cref{fig:mnist-tuw}.\footnote{We posit that due to the relative coarseness of the approximations made to derive the Wishart interpretations, the differences between CNE's t-SNE and UMAP interpretations are lost, and the resulting behaviour of our Wishart model is difficult to analyse within the CNE framework.}
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_wish.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/macosko_wish.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/zheng_wish.png}
+\end{minipage} \\
+\end{tabular}
+\caption{Comparison between embeddings obtained using our Wishart interpretations, across the MNIST and transcriptomics datasets as before. The plots show that embeddings obtained using our Wishart interpretations are more diffuse than embeddings corresponding to CNE with UMAP settings (and are more t-SNE-like than UMAP-like).}
+\label{fig:wish-plots}
+\end{figure*}
+%
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_cu.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_tsne.png}
+\end{minipage} &
+\begin{minipage}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_wish.png}
+\end{minipage} \\
+\end{tabular}
+\caption{An illustration showing that embeddings obtained our Wishart likelihood (right) are more comparable to CNE's t-SNE settings (center) than its UMAP settings (left).}
+\label{fig:mnist-tuw}
+\end{figure*}
+
+Although the kernel that appears in our derivations involves the double centered kernel, removing the kernel did not affect visualisations. \Cref{fig:mnist-nocen} shows MNIST embeddings recovered with and without centering, showing no noticeable differences.
+\begin{figure*}[ht!]
+\centering
+\begin{tabular}{ccc}
+\begin{minipage}{0.475\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_wish.png}
+\end{minipage} &
+\begin{minipage}{0.475\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/probdr/mnist_nocen.png}
+\end{minipage} \\
+\end{tabular}
+\caption{MNIST embeddings obtained using our Wishart interpretation, (left) with double centering of the kernel and (right) without, showing no visual differences, suggesting that the double centering is safe to drop.}
+\label{fig:mnist-nocen}
+\end{figure*}
+
+For purposes of illustration, we show MNIST embeddings obtained by dp-PCA and GPLVM in \cref{fig:pca-gplvm}, which are visually distinct from all nearest-neighbour based methods discussed thus far, presumably due to the graph Laplacian encoding different data statistics than the sample covariance that GPLVM and dp-PCA are based on.\footnote{Our GPLVM experiments were run using a \texttt{linear + constant + t + noise} kernels to match our Wishart interpretations, using a dp-PCA initialisation. In each case, the GPLVM hyperparameters were first ``pre-trained'' using the for 10 epochs, and the embeddings were trained for a further 40, matching the optimisation that was used in \mecite{tech-gplvm}.}
+\begin{figure*}[ht!]
+\centering
+    \includegraphics[width=0.475\linewidth]{figures/probdr/mnist_pca.png}
+    \includegraphics[width=0.475\linewidth]{figures/probdr/mnist_gplvm.png}
+\caption{An illustration showing that MNIST embeddings found using dp-PCA (left) and GPLVM (right) are visually distinct to the other nearest neighbour-based methods of dimensionality reduction presented thus far.}
+\label{fig:pca-gplvm}
+\end{figure*}
+
+In \textcontrib{\cref{app:proofs:wish-consistent}}, we show that the assumptions that are read off from our Wishart statements are valid (and introduce a novel approximation to a GP precision in the process). Specifically,
+$\mathbb E(\L_{ij}|\X) \sim -1/n, $
+i.e. the expected value of the off-diagonal elements of the graph Laplacian under our Wishart model scales inversely with the number of data, as expected from the data structure. In \textcontrib{\cref{app:proofs:wish-consistent}}, we also note that, using our interpretation, the implied data covariance is described by an inverse-Wishart distribution,
+$$ \L^+ \sim \mathcal W^{-1}(\X\X^T + \H K(\X, \X)\H + 0.5\tilde{\epsilon}^{-1}, n), $$
+and consider if there is a Wishart distribution that can be placed on the covariance, as in the case of a GPLVM,
+$$\L^+ \sim \mathcal W(\overset?\dots).$$
+This turns out to be non-trivial, as the model misspecification makes it so that the inverse of the statistic and the inverse of the model behave in different ways. We observe, for the first time in our interpretations, that simple approaches to translate the model via moment-matching fail, and that model specification should follow what we know to be true about the data structure.
+
+This concludes our dialogue on our interpretations for t-SNE-like algorithms. We have shown that a simple Bernoulli model for graph adjacencies, and a Wishart model for the graph Laplacian underpins t-SNE-like algorithms. We show that, visually, they recover similar embeddings to t-SNE-like algorithms, and we have shown that they correspond to valid statistical assumptions about the data structure (and hence are models that arise naturally when we try to model these data structures). Before we close the section, we show next what our interpretations bring: a potential for finding analytical inference algorithms.
+
+\textcontrib{\subsection{Efficient inference ideas using non-linear ProbDR}}
+
+In the previous subsection, we showed that UMAP and t-SNE-like algorithms correspond to maximum-likelihood assuming a model for the adjacencies given latents $\X$,
+$$ \A_{ij} \sim \text{Bernoulli} \left( \dfrac{\tilde{\epsilon}}{1 + d_{ij}^2(\X_i, \X_j)} \right), $$
+where $\tilde{\epsilon} = 4n_\text{neg}n_\text{neigh}/3n$, and a model for a graph Laplacian that is approximately equivalent,
+\begin{align*}
+    \L | \X &\sim \mathcal{W} \left((0.5\Tilde{\epsilon}^{-1}\I + 0.5 \H \P^u \H + \X \X^T)^{-1}, n \right).
+\end{align*}
+We conclude this section by describing ideas on how our framework can be used to suggest efficient inference within our unified model class. This will reveal more connections between different interpretations of ProbDR. 
+
+We first look for solutions within the eigenbasis obtained by the graph Laplacian, based on visual evidence. We then explore the usage of efficient inference algorithms suggested by \cite{sgns-svd} within SGNS/word2vec contexts that can be applied directly to our model class. This idea will connect our linear and non-linear ProbDR models, and show how non-linearity from the ``model side'' can be translated to a non-linearity on the ``statistic side''. Overall, the subsection shows how our framework suggests new ideas for building efficient algorithms.
+
+\textcontrib{\subsubsection{Parametric t-SNE using the graph Laplacian eigenbasis}}
+\label{probdr:approx-inf-a}
+
+Here, we argue that embeddings that share visual characteristics of t-SNE-like algorithms can be found using scaled minor eigenvectors of the graph Laplacian. This enables a form of parametric inference by making data points conditionally independent given parameters that we introduce.
+
+Recall the log-likelihood implied by our Wishart interpretation (eq.~\ref{eqn:wish-interp}); an optimum is achieved if the modelled precision (that uses the latents $\X$) is equal to $\L/n$\footnote{As is the case with exponential families, this corresponds to a moment matching.},
+\begin{align*}
+    \mathcal{E} &= -\text{tr}(\L\boldsymbol\Sigma) + n\log\det(\boldsymbol\Sigma) \\
+    \Rightarrow \dfrac{d\mathcal E}{d\boldsymbol\Sigma} &= -\L + n\boldsymbol\Sigma^{-1} = 0 && \text{at optimum} \\
+    \Rightarrow \L &= n\boldsymbol\Sigma^{-1}
+\end{align*}
+Therefore, near an optimum of the log-likelihood, we expect that the graph Laplacian $\L$ and the kernel $k(\X_i, \X_j) = \langle \X_i, \X_j \rangle + (1 + \| \X_i - \X_j \|^2)^{-1}$ share eigenvectors. Typically, for kernels like the RBF that are smoothly decreasing as a function of distance and stationary, the kernel eigenfunctions are organised in frequency\footnote{For RBF kernels, $\phi_k(x) \propto \exp(x^2/4\sigma^2) \cdot \exp(-cx^2) H_k(\sqrt{2c}x)$ \citep{gprw}, where the second part behaves as $\cos(2\sqrt{ck}x - k\pi/2)$ (DLMF: \textsection18.15(v)).}. Assume that the addition of the linear kernel simply increases the magnitude of the initial low-frequency modes of the Cauchy kernel. Therefore, the eigenvectors of the graph Laplacian must be either linear in the latents, or are low-frequency transforms of the latents.
+
+Although the argument for this claim is coarse, \cref{fig:non-param-3d} illustrates that, using the embedding found with our Wishart interpretation, the eigenvectors of the graph Laplacian are smooth functions (with some of them that are mostly linear) of the solution found by optimising the likelihood, \textit{and vice versa}.
+\begin{figure}
+    \centering
+    \includegraphics[width=0.95\linewidth]{figures/probdr/mnist_3d.png}
+    \caption{Illustrations showing the two dimensions of the non-linear ProbDR solution found using our Wishart interpretation (\cref{eqn:wish-interp}) as a function of the first two eigenvectors of the graph Laplacian $\L$ (bottom), and the two minor graph Laplacian eigenvectors as functions of the solution (top). These plots show that optimised embeddings are smooth functions of the GL eigenvectors and vice versa.}
+    \label{fig:non-param-3d}
+\end{figure}
+
+Therefore, we may attempt to parameterise the embedding using a non-linear function, e.g. a neural network on the eigenvectors of $\L$, and optimise just the parameters of this function using the Wishart likelihood (or the Bernoulli likelihood for efficiency, as the likelihood factorises by data point). \Cref{fig:param-wish} illustrates embeddings found when the embeddings are parameterised as a \textbf{linear function} of the graph Laplacian eigenvectors (the Laplacian Eigenmaps initialisation).\footnote{We use just eight dimensions of the GL, leading to just eight parameters that are optimised.}, showing that the visual quality of the embeddings found is similar to the embeddings found using our Wishart interpretation. Future work can explore whether such a solution can be found without direct optimisation of the objective.\footnote{Although this approach ``uses the data twice'', the approach can be justified as variational inference.}
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{figures/probdr/mnist_param_w.png}
+    \caption{MNIST embeddings found by parameterising our Wishart interpretation solutions as a linear function of the graph Laplacian, showing a similar clustering quality as our full-form Wishart models.}
+    \label{fig:param-wish}
+\end{figure}
+
+Next, we will briefly show how ideas of efficient inference for word2vec/SGNS can be applied to our models, linking our linear and non-linear interpretations.
+
+\textcontrib{\subsubsection{Approximate Bernoulli inference using SVD}}
+\label{probdr:sgns}
+
+Below, we borrow the main idea of \cite{sgns-svd}, who show that approximate inference within word2vec models can be done using singular value decomposition. The idea shows how element-wise functions of our matrix-valued statistics arise within inference contexts (and bear resemblance to kernel-PCA). However, we note that further refinement of the ideas is needed for large-scale use.
+
+Within SGNS contexts, the work above uses a similar GLM-type model as our Bernoulli interpretation, which leads to a loss of the form $\sum_{ij} \mathcal L_{ij}$. They then consider, what is the stationarity condition implied by a single data point pair? Setting $d\mathcal L_{ij}/dp_{ij} = 0$, where $p_{ij}$ is their probability of adjacency, they find that the stationarity condition implies,
+$$ \mathbf{w}_i\mathbf{c}_j^T = \M_{ij}, $$
+where $\mathbf{w}_i, \mathbf{c}_j$ are latent variables representing word and context embeddings. They then argue that such a problem is naturally solved using SVD of the matrix $\M$.
+
+We will follow a similar argument. Consider the CNE objective with a minor modification to the kernel,
+$$\mathbf{p}_{ij} = 2/(1+\exp(\mathbf{D}_{ij}^2)),$$
+as such a parameterisation will introduce the $\log$ function, making our estimator better behaved. This function has a similar behaviour to the Cauchy-kernel in that the probability decreases monotonically with distance (between the latents) and attains a maximal value of one when the distance is zero. Consider the objective with respect to a single pair of data points $i$ and $j$,
+\begin{align*}
+    \mathcal E_{ij} = \A_{ij}\log \mathbf p_{ij} + \Tilde{\epsilon} \log(1 - \mathbf{p}_{ij})
+    &\implies \dfrac{\partial \mathcal E_{ij}}{\partial \mathbf p_{ij}} = \dfrac{\A_{ij}}{\mathbf p_{ij}} - \dfrac{\Tilde{\epsilon}}{1 - \mathbf{p}_{ij}} = 0  && \text{at optimum} \\
+    \implies \dfrac{\mathbf{p}_{ij}}{1 - \mathbf{p}_{ij}} = \dfrac{\A_{ij}}{\Tilde{\epsilon}} &\implies \mathbf{p}_{ij} = \dfrac{\A_{ij}}{\A_{ij} + \Tilde{\epsilon}} \\
+    \implies \mathbf{D}_{ij}^2 = -\text{logit} \dfrac{0.5\A_{ij}}{\A_{ij} + \Tilde{\epsilon}} &= \log \left( 1 + \dfrac{2\Tilde{\epsilon}}{\A_{ij}} \right)
+\end{align*}
+The distance matrix $\mathbf{D}^2 = \log ( 1 + 2\Tilde{\epsilon}/\A)$, implies a corresponding inner product matrix,
+\begin{align*}
+    \X\X^T = -0.5\H \mathbf{D}^2 \H = -0.5 \H \log \left( 1 + \dfrac{2\Tilde{\epsilon}}{\A} \right) \H,
+\end{align*}
+and we our embedding through the eigendecomposition of the RHS. 
+
+In practice, the element-wise inverse of $\A$ is ill-posed. In \cref{app:cases:sgns}, we attempt a naive fix to the problem, and we show that embeddings from such an approach are indeed more diffuse than Laplacian Eigenmaps. It is the case however, that further refinement of these ideas is necessary to recover embeddings of a visual quality compared to those corresponding to CNE.
+
+Nevertheless, our arguments in this section show that there exists a rough equivalence between linear and non-linear ProbDR models. The interpretation of the algorithm above with a linear ProbDR model follows,
+$$ \nu\hat\S | \X \sim \mathcal{W}(\X\X^T + \sigma^2\I, \nu). $$
+with an elementwise function applied to the data,
+$$ \hat\S = -0.5 \H \log(1 + 2\tilde{\epsilon}/\A) \H, $$
+as algorithms involving an eigendecomposition can be interpreted in this manner. The non-linear ProbDR models that interpret t-SNE-like algorithms use a \textbf{non-linear kernel} but a straightforward estimate of the data statistic. Future work can explore whether more accurate approximations exist for obtaining CNE embeddings analytically.
+
+This concludes our presentation of our interpretations of UMAP and t-SNE-like algorithms. We showed that UMAP ($\tilde{s}=1$) and t-SNE ($\tilde{s}=100n_\text{neg}/n<<1$) correspond to inference assuming the model for nearest neighbour adjacencies,
+$$ \A_{ij} | \X \sim \text{Bernoulli} \left( \dfrac{\tilde{\epsilon}}{1 + \tilde{s} d_{ij}^2(\X)} \right). $$
+We then show that this model can be approximated by a Wishart distribution on the corresponding graph Laplacian,
+$$ \L | \X \sim \mathcal{W} \left((0.5\Tilde{\epsilon}^{-1}\I + 0.5 \H \P^u \H + \X \X^T)^{-1}, n \right), $$
+where $\tilde{\epsilon}=4n_\text{neg}n_\text{neigh}/3n$. We showed that the model make valid assumptions given the data statistic, and that they recover visually similar embeddings to those obtained by CNE (the simplification of UMAP/t-SNE that laid the foundations to the section). We also briefly explore ideas on efficient inference suggested by the framework, specifically that the solution may be found in the eigenbasis of the graph Laplacian and that SGNS-style approximate inference can be done in our framework. We leave a complete exploration of the ideas, and an exploration of natural gradient descent in our framework\footnote{As just one step of ordinary gradient descent produces well-defined clusters using our Poisson interpretation of \cref{eqn:poisson-like}.} to future work.
+
+In the last section of this chapter, we present variational interpretations for ProbDR, which will enable comparisons to wider representation learning, specifically SSL methods and transformers, presented as \cref{chp:probdr-nn}.
+
+\section{Variational interpretations}
+\label{chp:var-probdr}
+
+In this final section,
+%which is based on work in \mecite{probdr},
+we show that all methods with maximum a-posteriori interpretations presented so far have a dual KL-minimisation view, i.e. that the MAP inference described so far can also be framed as a KL-minimisation in a variational framework. This view will be useful for \cref{chp:probdr-nn}, to draw connections between ProbDR and wider representation learning.
+
+We demonstrate in this section that the graph presented in \cref{fig:probdr}, showing a model estimating a statistic (covariance/adjacency or precision matrix) of interest and a static variational constraint on the same statistic that uses the data, explains all methods discussed thus far. This alternative presentation enables these methods to be used in variational frameworks such as optimal transport and in frameworks where inference seems to be circular, as explored in the next chapter (\cref{chp:probdr-nn}) to explain the behaviour of transformers and SSL methods.
+
+\begin{figure}[ht!]
+\centering
+\begin{tikzpicture}
+\node[latent] (A) {$\M$};
+\node[latent, above=of A] (X) {$\X$};
+\node[obs, left=of A] (Y) {$\Y$};
+
+\edge{X}{A};
+\edge[dashed]{A}{Y};
+
+\node[above] at (current bounding box.north) {Generative Model \newline};
+\end{tikzpicture}
+\qquad
+\begin{tikzpicture}
+\node[obs] (A) {$\M$};
+\node[obs, above=of A] (Y) {$\Y$};
+
+\edge{Y}{A};
+
+\node[above] at (current bounding box.north) {Variational Approximation};
+\end{tikzpicture}
+\caption{A simplified graphical model that summarises the ProbDR class of models under a variational view. The framework estimates a statistic $\M$, which corresponds to a covariance or precision matrix. This is explained using the latents $\X$, and a variational constraint is put on $\M$ using the data $\Y$. The dotted line from $\M$ to $\Y$ is an optional inclusion to make the model generative for the data, that does not contribute any terms to objectives with respect to the latents $\X$.}
+\label{fig:probdr}
+\end{figure}
+
+Concretely, ProbDR can be presented as a variational framework in which low dimensional latents $\X$ describe a statistic of the data $\M$ (e.g., a covariance), which \textbf{optionally} can be used to construct a generative model on the data $\Y$. The moment $\M$ has a variational distribution associated with it, that uses the data $\Y$.
+
+Inference in the framework is done by maximising a lower bound on the evidence (and the likelihood), the evidence lower bound (ELBO, \cite{vi-intro, blei-vi}), with respect to $\X$ and model parameters,
+\begin{align}
+\label{eqn:probdr-obj}
+\argmax_{\X, \theta} \mathbb{E}_{q(\M|\Y)}[\log p_{\theta}(\Y|\M)] - \text{KL}(q(\M|\Y)||p(\M | \X)).
+\end{align}
+%
+The ELBO is derived as follows.
+\begin{align*}
+\text{KL}(q(\M | \Y)||p_{\theta}(\M | \X, \Y)) &= \mathbb{E}_{q(\M|\Y)} \left[ \log \dfrac{q(\M|\Y)}{p_{\theta}(\M|\X, \Y)} \right] \\
+&= \mathbb{E}_{q(\M|\Y)} [ \log q(\M|\Y) ] - \mathbb{E}_{q(\M|\Y)} [ \log p_{\theta}(\Y|\M) p(\M|\X) ] + \log p(\Y|\X) \\
+&=  \mathbb{E}_{q(\M|\Y)} \left[ \log \dfrac{q(\M|\Y)}{p(\M|\X)} \right] - \mathbb{E}_{q(\M|\Y)}[\log p_{\theta}(\Y|\M)] + \log p(\Y|\X) \\
+&= \text{KL}(q(\M|\Y) \| p(\M|\X)) - \mathbb{E}_{q(\M|\Y)}[\log p_{\theta}(\Y|\M)] + \log p(\Y|\X) \\
+&= \log p(\Y|\X) - \text{ELBO}(\X, \theta) \geq 0\\
+\Rightarrow \text{ELBO}(\X, \theta) &\leq \log p(\Y|\X),
+\end{align*}
+which shows that the function we derive lower bounds the model evidence, and in a similar fashion to variational inference, we seek to maximise it, with respect to latent variables that describe $\M$, $\X$, and the model parameters $\theta$ that describe the data $\Y$ given the statistic $\M$. As before, we have assumed an improper uniform prior over $\X$, i.e. $p(\X) \propto 1$.
+
+Optimising the ELBO with respect to $\X$ leads to the minimisation problem becoming,
+\begin{equation}
+    \label{eqn:prob-dr-kl}
+    \argmax_{\X} \text{ELBO}(\X, \theta) = \argmin_{\X} \text{KL}(q(\M | \Y)||p(\M |\X)),
+\end{equation}
+as the data fit term of the ELBO (the first term in \cref{eqn:probdr-obj}) is independent of $\X$ and the $\text{KL}$ above is independent of $\theta$.
+
+In our framework, the variational distribution $q$ does not have any parameters that are optimised, much like the case of denoising diffusion models \citep{diff-models}, and unlike traditional variational inference \citep{blei-vi} used by model frameworks such as VAEs and ``back-constrained'' GPLVMs \citep{bui-turner, gplvm-backconstraints}.
+
+The objective above has two terms. The second term (the KL divergence) corresponds to the objective/cost function that is minimised in each of the respective DR algorithms. The first term, $\log p_\theta(\Y|\M)$, corresponds to the generative model applied using the moment $\M$ on data $\Y$ and has no dependence on latents $\X$. Therefore, the generative model is a ``free'' addition, as its presence adds a constant to the objective with respect to the latents.\footnote{This shows how a two-step process that first obtains latents and then uses them as part of a regression arises, as the inference for $\theta$ follows after the inference of $\X$. An example of such a regress-after-DR algorithm is principal component regression, where a dimensionality reduction is first done on the covariates, and a regression then performed using simply the top principal components in the data.}
+
+In the coming subsections, we show how the Wishart models of ProbDR and additionally, t-SNE-like algorithms in their original formulation, which are \textbf{defined} as KL-minimising algorithms, fit into our variational framework.
+
+\subsection{Explaining the Wishart cases}
+\label{subsec:var-wish-interp}
+
+In this subsection, to establish a connection to ProbDR, we show that the 2-step process of estimating a covariance/precision-like matrix $\hat{\mathbf{G}}$ using the data $\Y$, and performing MAP estimation for latents in Wishart models of the form used with our dp-PCA, dp-MCA and our non-linear Wishart models that explain t-SNE-like algorithms models fit into our variational view of ProbDR.
+
+\begin{theorem}[Variational ProbDR and MAP Equivalence: Wishart Cases]
+The maximum a-posteriori estimate for $\X$ in our Wishart model after first estimating a covariance/precision-like matrix $\hat{\mathbf{G}}$, i.e.,
+$$\argmax_{\X} \log p(\nu*\hat{\mathbf{G}}| \X) \text{ assuming } p(\M | g(\X)) = \mathcal{W}(\M | g(\X), \nu) $$
+with an improper uniform prior on the latents $\X$, is equivalent to minimising the ProbDR KL-divergence (eq.~\ref{eqn:probdr-obj}), with the same model, and with a variational constraint that uses the data statistic as its sufficient statistic,
+$$\argmin_{\X} \text{KL}( q(\M | \hat{\mathbf{G}}) \| p(\M | g(\X))). $$
+Written using model notation, the variational setup is,
+\begin{align*}
+    \text{model (law of p)}: \M | g(\X) &\sim \mathcal{W}(g(\X), \nu), \\
+    \text{variational approx (law of q)}: \M | \hat{\mathbf{G}}(\Y) &\sim \mathcal{W}(\hat{\mathbf{G}}(\Y), \nu).
+\end{align*}
+\label{thm:weird_vi_mle}
+\end{theorem}
+%
+\begin{proof}[Proof of \cref{thm:weird_vi_mle}.]
+%
+In the maximum a-posteriori setup, the negative log-likelihood is as follows,
+$$ -\log p(\hat{\mathbf{G}}(\Y)*\nu| \X) = \dfrac{\nu}{2} \text{tr}(g(\X)^{-1} \hat{\mathbf{G}}(\Y)) + \frac{\nu}{2} \log |g(\X)|. $$
+%
+The variational bound can be written as,
+$$\text{KL}( q(\M | \hat{\mathbf{G}}(\Y)) \| p(\M | \X))) = \frac{\nu}{2} \left( \log |g(\X)| - \text{const.} \right) + \dfrac{\nu}{2}\text{tr}(g(\X)^{-1}\hat{\mathbf{G}}(\Y)) + c.$$
+%
+The objectives are equal up to additive constants.
+\end{proof}
+%
+\noindent Such a result is true for many exponential family distributions of the form,
+$$ p(\mathbf{x}) = h(\mathbf{x}) \exp(\boldsymbol{\eta}^TT(\mathbf{x}) -A(\boldsymbol{\eta}) ) $$
+as for exponential family densities $p$ and $q$, where $q$ has no parameters of interest (i.e. where its contributions to the objective are constant),
+\begin{align}
+    \mathcal E =-\text{KL}(q \| p) &= -\mathbb E_q(\log q(\mathbf{x}) / p(\mathbf{x})) \nonumber \\
+    &= -[\eta(\theta_q) - \eta(\theta_p)]^T \cdot \mathbb E_q(\mathbf{T(x)}) + [A(\eta_q) - A(\eta_p)] \nonumber \\
+    &= \eta(\theta_p)^T  \cdot \mathbb E_q(\mathbf{T(x)}) - A(\eta_p) + c, \label{eqn:exp-kl}
+\end{align}
+which is the log likelihood of the exponential family distribution $p$, up to a constant, with the expectation of the sufficient statistic under the variational distribution being set to the observed sufficient statistic. The Gaussian version of our Wishart statement was proved in \cite{gplvm}. Concretely, inference in classical GPLVMs occurs by maximising the log-likelihood,
+$$ \log \mathcal{MN}(\Y| \mathbf{0}, K_{\theta}(\X, \X), \I), $$
+which is equivalent, due to \cref{thm:weird_vi_mle}, to $\text{KL}(q(\S | \hat{\S}) \| p(\S | K(\X, \X)))$, where $\hat{\S} = \Y\Y^T/d$ assuming,
+\begin{align*}
+    p(\S | K_{\theta}(\X, \X)) = \mathcal{W}(\S | K_{\theta}(\X, \X), d) \text{ and } q(\S | \hat{\S}) = \mathcal{W}(\S | \hat{\S}, d).
+\end{align*}
+As another example, consider the model that explains Laplacian Eigenmaps, as we show earlier in the section; the model is formulated as,
+$$ \mathbf{L}*\nu | \X \sim \mathcal{W} \left(\left(\X\X^T + \beta \I  \right)^{-1}, \nu\right), $$
+with the MAP solution for $\X$ occurring at the minor eigenvectors of $\L$. This is equivalent, due to \cref{thm:weird_vi_mle}, to KL-minimisation assuming the variational view,
+\begin{align}
+    \label{eqn:var-lap-eigenmaps}
+    p(\boldsymbol{\Gamma} | \X) = \mathcal{W}(\boldsymbol{\Gamma} | (\X\X^T + \beta \I)^{-1}, \nu) \text{ and } q(\boldsymbol{\Gamma} | \L) = \mathcal{W}(\boldsymbol{\Gamma} | \L, \nu),
+\end{align}
+concluding the claim that the MAP views presented have a dual KL-minimising view. We will use the result corresponding to Laplacian Eigenmaps in the next chapter, to explain the behaviour of transformers. A natural question that comes up is, what happens if the variational constraint is dropped? We show in \cref{app:proofs:var-drop}, that with certain generative models, dp-PCA can be recovered by marginalising the covariance/precision $\M$. Before concluding the section, we show that t-SNE and UMAP, in their original formulation, also fit easily into this framework, showing that our variational framework can explain a variety of constructions.
+
+\subsection{Explaining the neighbour embedding cases}
+\label{chp:var-probdr-nea}
+
+We conclude the section by showing that (t-)SNE and UMAP minimise the ProbDR KL-divergence. As these will not be directly relevant to the exposition of the next chapter (\cref{chp:probdr-nn}), we keep our discussion brief and point the reader to additional results in the appendix.
+
+Many neighbour embedding algorithms, such as (t-)SNE and UMAP are \textbf{defined} as KL-minimising algorithms---in this section, we explicitly define the random variables on which they place distributional assumptions, and using which, the resulting objectives arise immediately. However, \cite{umap_loss, nc_sne} showed that optimisation details of UMAP and t-SNE play a large part in obtaining the embeddings (the objective does not fully characterise their behaviour). Therefore, we construct simple variational interpretations for these algorithms here for completeness, but we did not use them in their original formulation in the previous section for the interpretation of t-SNE-like algorithms as MAP algorithms.
+
+Our interpretations are based on a random adjacency matrix $\A' \in \{0, 1\}^{n \times n}$, which represents a data-data similarity matrix. (t-)SNE and UMAP define probabilities of data similarity $v_{ij}$ that depend on distances between the high-dimensional data points $\Y_{i:}$ and $\Y_{j:}$, and $w_{ij}$ that depend on the distances between the low-dimensional latents $\X_{i:}$ and $\X_{j:}$. As a reminder of the definitions in \cref{chp:bck-nea}, the form of the latent probabilities for UMAP is,
+$$ w_{ij}^U (\X_i, \X_j) = \dfrac{1}{1 + \|\X_i - \X_j \|^2}, $$
+with the data-based probabilities $v_{ij}(\Y_i, \Y_j)$ following similar constructions that use the high-dimensional distances $\|\Y_i - \Y_j\|^2$.
+%
+\begin{theorem}
+    \label{thm:tsne-umap}
+    (t-)SNE and UMAP objectives are recovered as the ProbDR KL divergence of \cref{eqn:probdr-obj} when model \& variational distributions on an auxiliary adjacency matrix $\A'$ are set as Bernoulli/Categorical distributions, tabulated in \cref{tbl:tsne-umap}.
+\end{theorem}
+\begin{table}[ht]
+    \centering
+    \begin{tabular}{l|cc|c}
+    algo & $q(\A'|\Y)$ & $p(\A' | \X)$ & $\text{KL}(q||p)$ \\
+    \hline
+    UMAP & $\prod_{i \neq j}^n \text{Bernoulli}(\A'_{ij} | v_{ij}^U(\Y))$ & $\prod_{i \neq j}^n \text{Bernoulli}(\A'_{ij} | w_{ij}^U(\X_{i:, j:}))$ & $\mathcal{C}_{\text{UMAP}}$ \\
+    SNE & $\prod_i^n \text{Categorical}(\A'_{i:} | v_{i:}^S(\Y))$ & $\prod_i^n \text{Categorical}(\A'_{i:} | w_{ij}^S(\X_{i:, j:}))$ & $\mathcal{C}_{\text{SNE}}$ \\
+    t-SNE & $\text{Categorical}(\text{vec}(\A') | v_{::}^t(\Y))$ & $\text{Categorical}(\text{vec}(\A') | w_{::}^t(\X))$ & $\mathcal{C}_{\text{t-SNE}}$ \\
+    \end{tabular}
+    \caption{ProbDR assumptions that result in (t-)SNE \& UMAP objectives in their original formulation (i.e. disregarding optimisation dynamics).}
+    \label{tbl:tsne-umap}
+\end{table}
+\noindent Proofs are provided in \cref{app:proofs:var-tsne}.\footnote{This results in a KL-divergence of the form $\text{KL}(q||p)$ and not $\text{KL}(p||q)$ as it is written in the (t-)SNE papers---this is simply a difference in notation, as it is more natural to set the data-based probabilities to $q$, as explained in \cref{app:proofs:nea-not}.}
+
+We reiterate that although the variational ideas presented thus far can lead to a unified class of models, explicit modelling of covariances and edges through normal and Bernoulli assumptions is recommended for traditional statistical modelling, due to the simplicity of reading off their assumptions. In other words, the usage of such variational frameworks can obfuscate exactly what is being modelled and with what constraints; their use lies in non-standard use-cases as we shall see in \cref{chp:probdr-nn}.
+
+Before we close the subsection, we revisit our approximate inference ideas in \cref{probdr:approx-inf-a} and show that the ideas of variational constraints encoding the data above and variational inference give rise to a model graph that will be similar to SSL methods studied in \cref{chp:probdr-nn}.
+
+\subsubsection{Revisiting approximate inference in non-linear ProbDR}
+\label{probdr:approx-inf-as-vi}
+
+In this short subsection, before we close the chapter, we show how variational inference leads to a model graph that we will see in \cref{chp:probdr-nn} when describing SSL methods, specifically one that looks like,
+$$ \text{``model'':} \Y \overset{\boldsymbol\theta}\rightarrow \boldsymbol\Gamma \qquad \text{static variational constraint}: \Y \rightarrow \boldsymbol\Gamma, $$
+where $\boldsymbol\theta$ corresponds to optimised parameters.
+
+In \cref{probdr:approx-inf-a}, we approximated the MAP solution for $\X$ given the model,
+\begin{align}
+\label{eqn:approx-bern}
+\A_{ij} \sim \text{Bernoulli}\left( \dfrac{\tilde{\epsilon}}{1 + \tilde{s} d_{ij}^2(\X)} \right),
+\end{align}
+with the following construction (where $\boldsymbol\theta$ is a learned parameter),
+$$ \X = \mathbf{U}_{\q}(\L(\Y)) \text{Diag}(\boldsymbol{\theta}). $$
+This is ill-specified due to circularity, but it is easy to see that this process is variational inference; i.e. minimisation of,
+$$\text{ELBO}(\boldsymbol\theta) = \mathbb E_{q(\X|\Y)}(\log p(\A|\X)) - \underbrace{\text{KL}(q(\X|\Y) || p(\X))}_{\text{ignored}}, $$
+with $p(\A_{ij}|\X_i, \X_j)$ as in \cref{eqn:approx-bern}, and a variational posterior, $q(\X|\Y) = \delta\left[\X|\mathbf{U}\cdot\text{Diag}(\boldsymbol{\theta})\right]$. The KL-divergence acts as a constant, and so it is ignored.\footnote{The KL is ignored due to the following behaviour. Assume $p(\text{vec}(\X)) = \mathcal{N}(0, \sigma_p^2\I)$ and $q(\text{vec}(\X)) = \mathcal{N}(\mu_q, \sigma_q^2 \I)$. Then,
+$$ \lim_{\sigma_p^2 , \sigma_q^2 \rightarrow \infty, 0} \text{KL}(q(\X)||p(\X)) = \underbrace{\dfrac{\|\mu_q\|^2}{2\sigma_p^2} + \dfrac{\sigma^2_q}{2\sigma^2_p}}_{\rightarrow0} - \underbrace{\dfrac{n}{2}\log\dfrac{\sigma^2_q}{\sigma^2_p}}_{\text{dominates, independent of } \mu_q}.$$}
+
+Setting aside the approximate inference, notice that, due to the equivalence between MAP estimation and the ProbDR KL-minimisation we show in this section, MAP inference for $\X$ assuming the model in \cref{eqn:approx-bern} is equivalent to KL-minimisation assuming a graph as below, where $p(\boldsymbol\Gamma_{ij}|\X)$ is the Bernoulli model in \cref{eqn:approx-bern} and $q(\boldsymbol\Gamma_{ij}|\A_{ij}) = \text{Bernoulli}(\boldsymbol\Gamma_{ij}|\A_{ij})$,
+\begin{center}
+\begin{tikzpicture}
+\node[latent] (A) {$\boldsymbol{\Gamma}$};
+\node[latent, above=of A] (X) {$\X$};
+\edge{X}{A};
+\node[above] at (current bounding box.north) {model \newline};
+\end{tikzpicture}
+\qquad
+\begin{tikzpicture}
+\node[obs] (A) {$\boldsymbol{\Gamma}$};
+\node[obs, above=of A] (Y) {$\Y$};
+
+\edge{Y}{A};
+
+\node[above] at (current bounding box.north) {variational constraint};
+\end{tikzpicture}
+\end{center}
+Therefore, with our approximate inference ideas added back in, we see that the graph describing the framework is seemingly,
+\begin{align*}
+    \text{``model'':} && \X=\mathbf{U}(\Y)\text{Diag}(\boldsymbol{\theta}) \rightarrow \boldsymbol\Gamma, \\
+    \text{variational constraint:} && \Y \rightarrow \boldsymbol\Gamma.
+\end{align*}
+We will see in \cref{chp:probdr-nn} that SSL methods follow a similar process. This shows that variational distributions that appear in machine learning perform two key activities: they can form a description of data when static, and they can correspond to approximate posteriors when they are optimised.
+
+This concludes our chapter on the interpretations of dimensionality reduction methods as probabilistic inference algorithms. We have shown that every algorithm considered performs MAP inference assuming the model class,
+$$ \S | \X \sim \mathcal{W}^{\{-1\}}\left( \X\X^T + \beta K_\text{cauchy}(\X) + \gamma\I, \nu \right), $$
+and that an intermediate interpretation in the case of UMAP and t-SNE appears as,
+$$ \A_{ij} | \X \sim \text{Bernoulli} \left( \dfrac{\tilde{\epsilon}}{1 + \tilde{s} d_{ij}^2(\X)} \right). $$
+We showed that the models are statistically valid, and show semantic outcomes and efficient inference ideas. We also present a variational view, which explains our MAP algorithms of the form,
+$$ \mathbf{G} \sim \text{ExpFam}(g), $$
+can be interpreted to be $\text{KL}(q||p)$ minimisation assuming,
+$$ q(\mathbf{M}|\mathbf{G}) = \text{ExpFam}(\mathbf{G}) \text{ and } p(\mathbf{M}|g) = \text{ExpFam}(g), $$
+which will be useful in the next chapter, to understand SSL methods and transformers, and suggest architectural modifications.

@@ -1,0 +1,180 @@
+\section{Generative latent variable models}
+\label{chp:gen-bck}
+
+In this section, we briefly describe some generative latent variable models used in science to provide examples for the form of their construction. These will be Gaussian mixture models which use discrete latents, hidden Markov models that use discrete latents but have a notion of temporal order, linear factor models with continuous latents and their non-linear extensions in the form of GPLVMs. The linear and non-linear latent factor models in this section are similar in form to the framework we develop in the thesis. We also explore some of their properties, which will be useful as a point of comparison to the models described later in the thesis.
+
+Latent variable models relate observations in terms of underlying, unobserved, and in some cases, interpretable variables. These models are central to representation learning, as they can be used for discovering compact and meaningful representations from large, complex datasets. As before, we also mention scientific case studies which involve constraining the models using domain-specific information.
+
+\subsection{Clustering using Gaussian mixture models}
+\label{gen:gmm}
+
+In this subsection, we describe the Gaussian mixture model with discrete latents, which performs \textit{clustering} of data. The model is formulated as,
+\begin{align*}
+k &\sim \text{Categorical}(\boldsymbol \pi), \\
+\mathbf x|k &\sim \mathcal N(\boldsymbol\mu_k, \boldsymbol\Sigma_k),
+\end{align*}
+where data from unknown classes are assumed to follow a Gaussian distribution in the high-dimensional space. In the previous section, in \cref{sub:lda-perspective}, we showed that posteriors of these models (under a shared covariance assumption) result in linear classifiers. These models are highly affected by model misspecification; in \cref{app:cases:dcai} we illustrate the results of \cite{dcai-gmm} who show that performing cluster enumeration when misspecifying the observation distribution (e.g. as a Gaussian when the data generating distribution is a Student-t) leads to an infinite number of clusters when the ground truth is finite. In \textcontrib{\cref{app:cases:pb}}, within a problem involving identification of cells with hypothesised irregular behaviour, we show how classification can be performed by the estimation of the Gaussian parameters through domain knowledge, and holding these fixed while performing one step of hard-assignment expectation maximisation. This is therefore another example of knowledge-driven constraints seen in science. Next, we show how such a model can be extended to temporal settings.
+
+\subsection{Latent time modelling using Hidden Markov models}
+\label{gen:hmm}
+
+A model akin to a GMM can be extended to account for temporal behaviour by imbuing the latent distribution with a distribution that evolves over time, leading to a hidden Markov model. They are a flexible model class used for a wide variety of applications, where the latents evolve according to a transition matrix that lists probabilities of moving from a state to another conditioned on the current state. The model graph is written as,
+\\
+\begin{center}
+\begin{tikzpicture}
+  \node[latent] (t1) {$t_{\delta_1}$};
+  \node[latent, right=of t1] (t2) {$t_{\delta_2}$};
+  \node[latent, right=of t2] (t3) {$\cdots$};
+
+  \node[obs, below=of t1] (s1) {$s_{\delta_1}$};
+  \node[obs, below=of t2] (s2) {$s_{\delta_2}$};
+  \node[obs, below=of t3] (s3) {$\cdots$};
+
+  \edge{t1}{t2};
+  \edge{t2}{t3};
+
+  \edge{t1}{s1};
+  \edge{t2}{s2};
+  \edge{t3}{s3};
+\end{tikzpicture}
+\end{center}
+where observations $s$ indexed by $\delta$ depend simply on the current state $t_\delta$. For use-cases such as dynamic time-warping, we are interested in the discovery of latent ``time'' or an unseen temporal state (for example, where a stem cell is within its differentiation trajectory). Such models can be constrained by using upper-triangular banded transition matrices to ensure monotonicity of the latent time, thus imposing a hard constraint, necessary for the recovery of an interpretable latent variable. In \textcontrib{\cref{app:cases:ice-cores}}, we show such an application within environmental science contexts, for dating ice-cores, and argue that probabilistic programming languages can be used to automate inference in such settings.
+
+\cite{sfa-hmm} show that HMM-like models (linear dynamical systems, that use a continuous state space for their latents but follow a similar graph to the above) are a result of a probabilistic interpretation of a temporal dimensionality reduction method---slow-feature analysis (SFA). SFA uses the eigendecomposition of a covariance matrix derived from a ``derivative'' matrix $\dot \Y \approx \Y_{2:n} - \Y_{1:n-1}$ to rank features by small time derivatives. The probabilistic interpretation involves a latent variable with a temporally autoregressive AR(1) prior, and is related to the observed data in a linear manner.
+
+Next, we explore non-temporal latent variable models, with continuous latent variables that have wide usefulness due to the relative ease of working with continuous latent variables.
+
+\subsection{Linear factor models}
+
+We now switch our attention to models for independent and identically distributed data that allow for continuous latents, which will be the focus of this thesis. Ideas from the next two subsections on how such models are constructed will appear frequently throughout the thesis. A number of algorithms, such as principal components analysis (\textbf{PCA}), factor analysis, Gaussian mixtures, non-negative matrix factorisation, latent Dirichlet allocation and independent components analysis (\textbf{ICA}) are known to have probabilistic interpretations or are formulated as probabilistic models \citep{pml-ii}, wherein the generative model for $n$ independent high ($d$-)dimensional data points $\Y \equiv \begin{bmatrix} \Y_{1:} & ... & \Y_{n:} \end{bmatrix}^T \in \mathbb R^{n \times d}$ is,
+\begin{align*}
+ \X_{i:} &\sim p(.), \nonumber \\
+ \Y_{i:} | \X_{i:} &\sim \text{ExponentialFamily}(g(\X_{i:}, \dots))
+\end{align*}
+where $\X \in \mathbb R^{n \times \q}$ is a matrix-valued random variable of corresponding (typically low $\q$-dimensional) latent variables. The inference process can be full-form (i.e. unamortised; as the posterior does not always factorise by data point) and inference can occur for the full matrix $\X$. Vanilla Gaussian process latent variable models (\textbf{GPLVMs}, \cite{gplvm}), generative topographic maps (GTMs, typically with a discrete latent grid; \cite{gtm}) and variational models \textbf{VAEs} \citep{vae} are also designed with such generative models, mapping the latents to the data distribution's parameters. In these models, the map $f$ is described using a Gaussian process and a neural network respectively, rather than a linear function. In the case of VAEs, inference is not full form by design---the variational posterior is parameterised in these cases with a neural network, and factorises by data point, as the true posterior does.
+
+% summarise your contributions of all of the explanations below in a couple of sentences at the outset
+% graphical abs
+The foundational linear latent variable models assume a linear relationship between data $\Y$, latent coordinates $\X \in \mathbb R^{n \times \q}$ and a loading/factor matrix $\mathbf{W} \in \mathbb R^{\q \times d}$,
+$$\Y = \X \mathbf{W} + \boldsymbol{\epsilon}.$$
+All three random variables on the RHS are unobserved, and there are known analytical solutions for some of the latents depending on which is marginalised.
+Probabilistic matrix factorisation (PMF, \cite{pmf}) results in a (truncated) singular value decomposition (SVD) of the data describing the (rank-$\q$) latents and the latent mapping,
+\begin{align}
+\label{eqn:summary:background:latentlin}
+\text{PMF:} \quad \Y | \X, \mathbf{W} &\sim \mathcal{MN}(\X \mathbf{W}, \sigma^2 \I_n, \I_d) \\
+\implies \widehat{\X \mathbf{W}} &= (\mathbf{U} \S) (\mathbf{V}^T) && \text{SVD}(\Y), \nonumber \end{align}
+while probabilistic PCA of \cite{ppca} involves the marginalisation of latent coordinates,
+\begin{align}
+\cref{eqn:summary:background:latentlin} + \X_{ij} &\sim \mathcal{N}(0, 1): \nonumber \\
+\label{eqn:summary:background:ppca}
+\text{PPCA:} \quad \Y | \mathbf{W} &\sim \mathcal{MN}(\boldsymbol{0}, \I_n, \mathbf{W}^T\mathbf{W} + \sigma^2\I_d) \\ \Rightarrow \hat{\mathbf{W}}^T &= \mathbf{U}(\mathbf{\Lambda} - \sigma^2 \I_\q)^{1/2} \mathbf{R}, && \text{eigh}(\Y^T\Y/n) \nonumber
+\end{align}
+and finally, dual-probabilistic PCA of \cite{gplvm}, equivalently principal coordinates analysis, marginalises the linear map,
+\begin{align}
+\cref{eqn:summary:background:latentlin} + \mathbf{W}_{ij} &\sim \mathcal{N}(0, 1): && \nonumber \\
+\text{dual PPCA:} \quad \Y | \X &\sim \mathcal{MN}(\boldsymbol{0}, \X\X^T + \sigma^2\I_n, \I_d) \\ \Rightarrow \hat{\X} &= \mathbf{U}(\mathbf{\Lambda} - \sigma^2 \I_\q)^{1/2} \mathbf{R}. && \text{eigh}(\Y\Y^T/d) \nonumber
+\end{align}
+%
+When dealing with problems such as blind source separation when we need to ``un-mix'' signals from different sources (e.g. a speaker and background noise), a very similar model is specified---the linear model above with the noise level set to zero,
+$$ \Y = \X \mathbf{W}^{-1} \Longleftrightarrow \X = \Y \mathbf{W}, $$
+where $\textbf{W}$ is invertible. Independent component analysis is an algorithm used to construct a matrix $\mathbf{W}$ that leads to ``independent'' sources in such a scenario. \cite{ica} show that it is an algorithm that can result from a number of equivalent views, including maximum likelihood estimation assuming a prior $P_x$ on $\X \in \mathbb R^{n \times \q}$ with $\q=d$ for invertibility,
+$$ \forall i,j: \X_{ij} \sim P_{x}. $$
+In words, probabilistic ICA makes the assumption that the latent sources $\X$ are independent and non-Gaussian (which is needed for identifiability). As we assume invertibility, specifying a prior is equivalent to specifying a generative model for $\Y | \X$.
+MLE within this model class follows that each point $\X_{ij}$ follows a known distribution $P_x$ with density $f$, hence,
+\begin{align*}
+    \hat{\mathbf{W}} &= \argmax_{\mathbf{W}} \sum_i^n \log p_{\Y_i}(\Y_i|\mathbf{W}) \\
+    &= \argmax_{\mathbf{W}} \sum_i^n \log p_{\X_i}(\mathbf{W}^T\Y_i) + n\log|\det\mathbf{W}| && \text{change of variables} \\
+    &= \argmax_{\mathbf{W}} \sum_{ij} \log f(\mathbf{W}_j^T\Y_{i}) + n\log|\det\mathbf{W}|, && \text{\cite{ica-mle, pml-ii}}
+\end{align*}
+which is the traditional ICA objective that is a function of the elements of the matrix $\X$ element-wise.
+Along with BSS, where interpretable latents are recovered, \cite{ica-gabor} found that interpretable maps (Gabor-like filters) are discovered when ICA is used with cell images.
+
+Canonical correlation analysis (CCA) follows a similar generative model as the other linear factor models above, but with two datasets instead of one, following a model $\Y_a \leftarrow \X \rightarrow \Y_b$. CCA was originally defined to retrieve linear factors $\mathbf{w}_a, \mathbf{w}_b$ such that
+$\text{Cor}(\mathbf{w}_a^T\Y_a, \mathbf{w}_b^T\Y_b)$ is maximised \citep{cca}, and this objective is a log-likelihood corresponding to the model graph above, with Gaussian conditionals \cite{pcca, pml-ii}.
+
+Many latent variable models presented thus far are used as dimensionality reduction models. In the case of dual-probabilistic PCA, as the latents are organised by decreasing variance, we are able to select only a few components that encode a large amount of variation of the data, thus describing the dataset with components with smaller dimensionality. In the case of ICA, if the latent factors are known not to correspond to sources of importance but to noise, then these sources are typically discarded, reducing the dimensionality of the data while reducing the amount of noise in the data. Of course, assuming that $\X$ is low dimensional in the first place leads to a dimensionality reduction, with $\X$ encoding properties of the data that depend on the model.
+
+This concludes our presentation of models with discrete latents (GMMs, HMMs) and continuous linear latent variable models. Before concluding the section, we show how linear latent variable models are extended non-linearly, as many of our interpretations of t-SNE-like algorithms will have a very similar form as the upcoming models.
+
+\subsection{Gaussian process latent variable models}
+\label{subsec:gplvm}
+
+In the previous sections, we explored models where latents are related to observed outputs in a linear manner. On many occasions however, we expect causal factors to influence the data in a non-linear way. An example is found in the context of grid cells---certain brain cells called grid cells are known to have spatially tessellating firing fields, visualised in \cref{fig:grid-cells} \citep{grid-cell-evd}. The activity spikes therefore show a non-linear transform of a causal variable, in this case location.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.33\linewidth]{figures/gplvm/grid_cells.png}
+    \caption{A spatial firing field measuring the number of firings of a rodent grid cell, plotted as a function of the rodent's location in space, showing that the firing field is spatially tessellated (the firing rates are a sinusoidal function of the location of the rodent in the circular container). Data from \cite{grid-cell-evd}. This motivates non-linear latent factor models such as the GPLVM, as causal factors influence observations non-linearly.}
+    \label{fig:grid-cells}
+\end{figure}
+
+Another example is that a latent corresponding to cell-division cycle can be related to gene expression in a cyclical manner.\footnote{There are other situations where the behaviour of eigenvectors of empirical covariances is known to be smoothly varying across a variable of interest (yet another example is the yield curve, where an SVD of the dataset of bond rates by tenor yields the term structure).} To perform inference for such cell states, a strong constraint on the observation model is necessary to constrain latents enough such that interpretable latents can be recovered.
+
+Observation models of the last section can be extended to discover such underlying latent variables by noticing that linear dimensionality reduction models use a \textbf{Gaussian process} with a linear covariance function \citep{gplvm}.
+
+Gaussian processes can be seen to represent distributions over functions \citep{gprw}. For instance, consider a set of points chosen arbitrarily from an index set $\X$ distributed as,
+$$ \begin{bmatrix} y_a \\ y_b \end{bmatrix} | \begin{bmatrix} \mathbf{x}_a \\ \mathbf{x}_b \end{bmatrix} \sim \mathcal{N} \left( \boldsymbol{0}, \begin{bmatrix}
+    1 & \exp(-\| \mathbf{x}_a - \mathbf{x}_b \|^2) \\ \exp(-\| \mathbf{x}_a - \mathbf{x}_b \|^2) & 1
+\end{bmatrix} \right). $$
+Samples of $y$ can be seen as a finite set of points on a smooth line (which is enforced by the choice of covariance). If the covariance is changed to one that's periodic, e.g. $\text{cov}(y_a, y_b) = \exp(-\sin^2( \| \mathbf{x}_a - \mathbf{x}_b \|))$, samples $y$ can be seen to be samples from a signal that's cyclical. The constructions are typically abstracted away, and we denote $\mathcal{GP}(0, k_{\text{smooth}}(\cdot, \cdot))$ or $\mathcal{GP}(0, k_{\text{periodic}}(\cdot, \cdot))$ to represent distributions over smooth/periodic functions\footnote{Posterior means of such processes, however, lie on different function spaces than their samples \citep{gp-rkhs}.}. Samples of paths from such GPs are illustrated below in \cref{fig:gp-samples}.
+\begin{figure}[ht!]
+    \centering
+    \includegraphics[width=.9\linewidth]{figures/other_bck/gp.png}
+    \caption{Samples obtained by smooth, periodic and linear kernels.}
+    \label{fig:gp-samples}
+\end{figure}
+
+Replacing the linear kernel of the classical linear LVMs with a non-linear kernel leads to an extension known as the Gaussian process latent variable model (GPLVM, \cite{gplvm}),
+$$ \Y | \X \sim \mathcal{MN}(0, K(\X, \X) + \sigma^2\I_n, \I_d), \quad \X \sim \dots $$
+We can recover features that are related to the output in a non-linear manner as $K(\X, \X) \approx \Phi(\X) \Lambda \Phi(\X)^T$, where $\Phi(\X)$ corresponds to the matrix of dominant eigenfunctions of the kernel evaluated at $\X$.
+The parametric form of the models in the previous section can suggest efficient inference ideas in such model classes, as demonstrated below by the parametric form of GPLVM.
+\begin{example}{\textbf{Parametric GPLVM}:}
+Kernels can be decomposed using random (Fourier) features \citep{rff} where $\mathbf{K}(\X, \X) \approx \boldsymbol{\Phi}(\X)\boldsymbol{\Phi}(\X)^T$, and we note that a matrix factorisation-type model,
+$$ \Y|\X \sim \mathcal{MN}\left(\boldsymbol\Phi(\X)\mathbf{W}, \sigma^2\I_n, \I_d \right), $$
+with weights marginalised leads to the GPLVM. Therefore, the model above can be seen as a parametric precursor of the GPLVM, and it can be used to perform mini-batch parametric inference with stochastic gradient descent, due to factorisation of the log likelihood by data point (i.e. conditional independence of the embeddings given $\mathbf{W}$). \Cref{fig:rff-gplvm} shows MNIST digits clustered using the model, showing that clustering by digit is achieved, albeit with some amount of collapse into strands.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figures/gplvm/rff.png}
+    \caption{Embeddings generated using the parametric GPLVM model on the MNIST dataset (using mini-batch SGD for optimisation), showing clustering by digit, albeit with some collapse of clusters into strands, illustrating the ability of the model for dimensionality reduction.}
+    \label{fig:rff-gplvm}
+\end{figure}
+A longer exploration of the use of RFFs with GPLVM in a fully Bayesian setting is presented in \cite{rflvm}. Similar ideas will be used with our interpretations of t-SNE-like algorithms to enable efficient inference through mini-batching.
+\end{example}
+Gaussian processes constrain the functional form between latents and data. In other models, such as VAEs for images, modelling constraints can similarly yield results. For example, \cite{vae-struc} show that, a Gauss-Markov random field with adjacencies across pixels or areas of an image makes for a good generative model. Within generative models for proteins, representations are also commonly seen to respect physical symmetries, for example, in alphafold \citep{af2}.
+
+GPLVMs are computationally challenging due to the calculation of the log-determinant and inverse of the kernel matrices needing to be computed at every iteration of optimisation. Following the ideas of \cite{gp-big-data}, sparse-GPs can be used to construct GPLVMs that do not incur this cost. \textcontrib{\Cref{app:cases:gplvm}} shows how such methods can be used within single-cell RNA-seq contexts; the main lessons are summarised as follows. Firstly, expert-driven or science-driven initialisations are necessary for interpretability. Secondly, ``pre-training'' other hyperparameters of GPLVMs, when the latent initialisations are meaningful, is necessary to retain the inductive bias from initialisations. Thirdly, pseudo-inputs to the sparse-GPs can be constrained such that the resultant functions are additive, and finally that normalising the data, so that $\forall i: \sum_k\Y_{ik}=10^5$, leads to vastly improved performance. These lessons reiterate that constraints are common in scientific modelling. 
+
+% write a concluding paragraph for this section describing where we got to in the Classical Dimensionality Reduction section. Then a paragraph on scientific case studies and what you were doing there and bring it back to what you opened with on contributions of probabilistic models to interpretability and understanding of underlying mechanisms
+
+% imp: Although generative-model based LVMs may not lead to the best representation of the data (typically as they're not well specified), probabilistic models are useful as they are interpretable.
+
+% predict.gam
+% https://uca.hal.science/hal-02170202/file/wohrer_ising_latent.pdf
+% X_ij unimodal: https://en.wikipedia.org/wiki/Variance-gamma_distribution
+
+Before we conclude this section, we show that GPLVM-like models, which are similar to our models in \cref{part:ii}, can be resistant to likelihood-misspecification.
+\begin{proposition}
+Below, we show that GPLVMs which are used often in single-cell data analysis, are resistant to misspecification when the data is binary contrary to model assumptions.
+
+Consider a basic model for data such as gene-expression data (which is typically zero-inflated) that is binarised, formulated as a latent Gaussian process model affected by thresholding,
+\begin{align*}
+    \mathbf{z} | \X &\sim \mathcal{N}(\boldsymbol{0}, \boldsymbol \Sigma(\X)) \\
+    \forall i: y_{i} &= \begin{cases}
+        \mathcal I(z_i > 0) & \text{w.p. } 1 - p_{z} \\
+        0 & \text{w.p. } p_z
+    \end{cases}.
+\end{align*}
+%
+Then,
+\begin{align*}
+    Cov(y_i, y_j) &= \mathbb E(y_i y_j) - \mathbb E(y_i) \mathbb E(y_j) \\
+    &= (1 - p_z)^2 \mathbb P(z_i, z_j > 0) - \dfrac{1}{4}(1 - p_z)^2 \\
+    &= \dfrac{(1 - p_z)^2}{2\pi}\arcsin(\hat \Sigma_{ij}) && \text{Gaussian orthant \citep{arcsin-result}} \\
+    &\approx \dfrac{(1 - p_z)^2}{2\pi}\hat \Sigma_{ij}, && \text{1}^\text{st} \text{ order Taylor}
+\end{align*}
+where $\hat \Sigma_{ij} = \text{Cor}(z_i, z_j)$. This shows that using GPLVMs with binary data does not lead to a misspecification in terms of the covariance choice, as this is somewhat preserved (at least, the resulting covariance is monotone and nearly-linear in the assumed data-generating covariance). Moreover, if this is the generating process, the estimate of empirical covariance even in the presence of binarisation will lead to a sensible estimate due to the central limit theorem.
+The covariance arises as a sufficient statistic in a large class of models, and therefore, if its estimate is unharmed by misspecification, downstream inference results are saved, up to their interpretation (as the interpretation of a covariance between binary random variables is different to that obtained between real-valued response variables).
+\end{proposition}
+%argue about taylor expanding
+We highlight this property for two reasons. Firstly, ProbDR models in \cref{part:ii} are similar in form to GPLVMs, and therefore, some lessons can be transferred to those cases. Secondly, we will argue that GPLVM is a more natural specification (after adequate constraining) for general use-cases, and therefore, we are interested in its robustness.
+
+This concludes our exposition of generative models. We have shown how they are constructed as models that use latents to explain aspects of the data, and provided examples of linear latent variable models, their non-linear extensions in the form of GPLVMs, and the interpretations of the corresponding inference algorithms as variance-maximising or source-separating algorithms. In the next section, we describe dimensionality reduction algorithms without known probabilistic interpretations, algorithms which will seem different to those presented thus far.

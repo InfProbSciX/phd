@@ -1,0 +1,56 @@
+\section{Formulating probabilistic interpretations}
+\label{chp:bck-interp}
+
+Having reviewed foundational ideas of probabilistic modelling in the last section, in this section, we describe some methods by which probabilistic interpretations, which make up a majority of this thesis, can be formulated. In the thesis, we interpret arbitrary objective functions that act on data as being related to the posteriors of probabilistic models, so that implicit modelling assumptions can be read off as motivated in the introduction. One way by which loss functions $\mathcal{L}$, minimised with respect to parameters $\boldsymbol{\theta}$, can be interpreted is by viewing the optimisation process as MAP-inference, with the objective interpreted as a negative log-posterior or an upper bound on it,
+$$\mathcal{L}(\boldsymbol{\theta}) \geq -\log p(\boldsymbol{\theta}|\mathbf{x}) + k.$$
+Another way of interpretation follows by viewing gradient components of unrolled optimisation (as we shall see corresponds to neural network architectures in \cref{chp:probdr-nn}) as score functions of the negative log posterior in updates such as,
+$$ \boldsymbol{\theta} \longleftarrow \boldsymbol{\theta} - \eta \nabla_{\boldsymbol{\theta}} \underbrace{\mathcal{L}(\boldsymbol{\theta})}_{-\log p(\boldsymbol{\theta}|\mathbf{x})},$$
+and update steps in the form of,
+$$ \boldsymbol{\theta} \longleftarrow f(\mathbf{x}), $$
+are interpreted such that $f(\mathbf{x})$ calculates analytically the (arg-)maximum of $\log p(\boldsymbol{\theta}|\mathbf{x})$ (for example, $f$ could represent the singular value decomposition of a matrix, which is known to result from the optimisation of a squared-error objective within the realm of matrix factorisation). Another example of such an interpretation involving discrete optimisation is given in \textcontrib{\cref{app:cases:drtree}}.
+
+There is one more case that is useful for the discussion in the thesis, which is how variational interpretations arise when working with objectives that seem ``circular''. Such objectives/cases occur widely in machine learning, as we see in \cref{chp:var-probdr} and \cref{chp:probdr-nn}. We now discuss an example of such a case in the upcoming subsection.
+
+\textcontrib{\subsection{Variational interpretations and the Griffin-Lim algorithm}}
+\label{subsec:gla-maintext}
+
+Some algorithms and objectives appear circular; this section shows how to interpret such methods---using variational ideas. This view will be important to understand our framework ProbDR from a different perspective in \cref{chp:var-probdr}, and self-supervised methods and transformers in \cref{chp:probdr-nn}.
+
+When a computational pipeline looks circular, e.g. in autoencoders $\Y \rightarrow \X \rightarrow\Y$ with $\Y$ representing data and $\X$ latent variables, a variational explanation typically exists. For example, \cite{vae} introduce the variational autoencoder that makes inference in this setting statically sensible---with the (generative) model corresponding to edge $p: \X \rightarrow\Y$ and the variational approximation describing the unknowns using the data $q: \Y \rightarrow \X$, as posteriors are typically formulated.
+
+In this section, we show that the Griffin-Lim algorithm (GLA, \cite{gla}), a phase-reconstruction algorithm used widely for generating speech from spectrograms before the advent of neural vocoders, corresponds to an objective which does not have a simple MAP-interpretation. The squared-error objective that underpins the method involves the data, in a sense, on both ``sides''. We will show that a simple variational interpretation explains such an objective.
+
+The complete details of the case-study are provided in \textcontrib{\cref{app:cases:gla}}. GLA finds unknown phases $\boldsymbol{\theta}$ given the spectrogram $\S$. Let the audio sequence be represented as, 
+$$\tilde{\mathbf a} = \mathbf D_k^\dagger \operatorname{vec}(\S \odot \exp(\boldsymbol{\theta}i)),$$
+where $\mathbf D_k^\dagger$ corresponds to the inverse Fourier transform. Then, GLA minimises a squared-error objective between the audio sequence and the real part of the audio (so that no imaginary part is recovered by $\boldsymbol{\theta}$ as expected of typical audio sequences; \cite{deep-gla}),
+$$\mathcal{L} = \left\| \mathbf{\Pi} \Re \left( \tilde{\mathbf a} \right) - \tilde{\mathbf a}  \right\|^2_F \nonumber = \Re(\tilde{\mathbf a})^T (\I - \mathbf{\Pi}) \Re(\tilde{\mathbf a}) + \Im(\tilde{\mathbf a})^T \Im(\tilde{\mathbf a}).$$
+The matrix $\boldsymbol{\Pi}$ describes how points in $\tilde{\mathbf{a}}$ are related due to redundancy in the spectrogram (the matrix $\I - \boldsymbol{\Pi}$ has a graph Laplacian interpretation). The loss effectively selects $\boldsymbol{\theta}$ that ensures that the audio recovered is real-valued and consistent (due to the action of $\boldsymbol{\Pi}$) given redundancies in the spectrogram. We show in \cref{app:cases:gla} that this is the log-density (up to constants) of the model,
+\begin{equation}
+    \begin{bmatrix}
+        \Re(\tilde{\mathbf a}) \\ \Im(\tilde{\mathbf a})
+    \end{bmatrix} \sim
+    \mathcal{N} \left(\boldsymbol{0}, \begin{bmatrix}
+        ((1+\delta)\I - \mathbf{\Pi}) & \boldsymbol0 \\
+        \boldsymbol0 & (1+\delta)\I
+    \end{bmatrix}^{-1} \right).
+\end{equation}
+We add a small jitter matrix to the true precision for non-degeneracy reasons, $\delta \I$, which simply corresponds to adding a small amplitude term to the objective (and is independent to the phases being estimated). The implied covariance (calculated in \cref{app:cases:gla}) shows that the variance corresponding to the imaginary part of the audio is far smaller than the real part, and that there are correlations across audio points that are connected due to redundancies in the spectrogram, in line with what is expected of typical audio sequences. This example shows that probabilistic models can correspond to compact generative accounts of the random variables they model.
+
+Due to the random variable of interest (the phases $\boldsymbol\theta$) appearing non-linearly on the left-hand side of the sampling statement however, this is a non-standard model statement. In such cases, objectives such as the above can be thought of as KL divergences---we will return to this idea concretely in \cref{chp:var-probdr}. If a model and variational constraint are set up as the following,
+\begin{align*}
+    p(\mathbf{z}) &= \mathcal N \left(\begin{bmatrix}
+        \Re(\tilde{\mathbf a}) \\ \Im(\tilde{\mathbf a})
+    \end{bmatrix}, \begin{bmatrix}
+        (1+\delta)\I - \mathbf{\Pi} & \boldsymbol0 \\
+        \boldsymbol0 & (1+\delta)\I
+    \end{bmatrix}^{-1} \right) \text{ and,} \\
+    q(\mathbf{z}) &= \mathcal{N}(\mathbf{0}, \I),
+\end{align*}
+where $\mathbf{z}$ is an arbitrary random vector representing a hypothetical audio sequence. Then, the KL divergence $\text{KL}(q(\mathbf{z})||p(\mathbf{z}))$ results in the GLA objective (with $\delta\approx0$) as,
+$$ \text{KL}(q(\mathbf{z})||p(\mathbf{z})) \overset+= \dfrac{1}{2}\left[ \underbrace{(\mu_q - \mu_p)\Sigma_p^{-1}(\mu_q - \mu_p)}_{\mathcal{L}} + \underbrace{\text{tr}(\Sigma_p^{-1}\Sigma_q) - \log\det(\Sigma_p^{-1}\Sigma_q)}_{c} \right]. $$
+Such interpretations will form the basis of \cref{chp:var-probdr} and \cref{chp:probdr-nn}, in which we show that the variational constraint in many ways acts as a form of ``data''. The variational distribution $q$ acts as a variational constraint and not as an estimator of the true posterior. This form of constraint is seen with de-noising diffusion models \cite{diff-models}.
+
+Probabilistic interpretations can arise in other ways, e.g. through a Bayesian decision theoretic framework (where the objectives are related to utility, risk, or loss functions), approximate inference frameworks (where the objectives are interpreted as specific lower bounds on posteriors), or by studying algorithms as natural gradient descent algorithms, assuming a probabilistic model.
+The Bayesian learning rule \cite{bayes-learning-rule} is an example of the latter, where a variety of algorithms (such as dropout, and the Adam optimiser introduced in \cite{adam}) used in deep learning can be framed as natural-gradient-based minimisation algorithms, assuming a family of posterior-constraining variational forms. Such interpretations are useful for the study of the choice of architecture/algorithms as this have a large impact on inference, and example of which is described in \textcontrib{\cref{app:cases:optim}}. We leave the exploration of such ideas and their application to the methods studied in this thesis for future work.
+
+We conclude the methodological background, where we have shown how models and probabilistic interpretations are constructed. In the upcoming sections, we will present a view of probabilistic representation learning that we believe summarises ideas of the field, to be able to consider where widely-used algorithms without probabilistic interpretations should sit.

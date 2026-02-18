@@ -1,0 +1,272 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Some custom packages
+%%
+\RequirePackage{xspace}
+
+\usepackage{lmodern}
+\usepackage{amssymb}
+\usepackage{algorithm}
+% \usepackage{algorithmicx}
+\usepackage[noend]{algpseudocode}
+\usepackage{booktabs}
+\usepackage{graphicx} % draft
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage{mathtools}
+\usepackage{multicol}
+\usepackage{tikz}
+\usepackage{minted}
+\usepackage{xcolor}
+\usepackage{blindtext}
+\usepackage{wrapfig}
+\usepackage{pgfornament}
+\usepackage[normalem]{ulem}
+\usepackage{csquotes}
+
+\usemintedstyle{pastie}
+\usetikzlibrary{bayesnet}
+\usetikzlibrary{positioning}
+
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable}
+
+% Define the new environment
+\newenvironment{casestudy}[1] % #1 is the parameter for the title
+  {\begin{tcolorbox}[breakable,
+                     enhanced,
+                     colback=white,
+                     colframe=black!80,
+                     colbacktitle=black!80,
+                     title=#1, % Use the title passed as a parameter
+                     fonttitle=\bfseries\large,
+                     coltitle=white,
+                     boxed title style={sharp corners, colframe=black!80},
+                     attach boxed title to top left={yshift=-2mm, xshift=2mm},
+                     borderline={0.5mm}{0mm}{black!80},
+                     sharp corners,
+                     boxsep=5pt,
+                     left=10pt,
+                     right=10pt,
+                     top=10pt,
+                     bottom=10pt]
+  }
+  {\end{tcolorbox}}
+
+\newenvironment{contrib}[1] % #1 is the title
+  {\begin{tcolorbox}[breakable,
+                     enhanced,
+                     colback=white,
+                     colframe=blue!50,
+                     colbacktitle=blue!50,
+                     title=#1,
+                     fonttitle=\bfseries\large,
+                     coltitle=white,
+                     boxed title style={sharp corners, colframe=blue!50},
+                     attach boxed title to top left={yshift=-2mm, xshift=2mm},
+                     borderline={0.5mm}{0mm}{blue!50},
+                     sharp corners,
+                     boxsep=5pt,
+                     left=10pt,
+                     right=10pt,
+                     top=10pt,
+                     bottom=10pt]
+  }
+  {\end{tcolorbox}}
+
+\newcommand{\mecite}[1]{\textbf{\textcolor{black!50}{\cite{#1}}}}
+
+\definecolor{alertred}{HTML}{BF0603}
+
+\newcommand{\comeback}[1]{\textcolor{alertred}{#1}}
+\newcommand{\icomeback}[1]{\textcolor{alertred}{\textbf{#1}}}
+\newcommand{\textcontrib}[1]{\textcolor{black!50}{#1}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fonts (like different typewriter fonts etc.)
+%%
+%\RequirePackage[scaled=.87]{couriers}
+%\RequirePackage[T1]{fontenc}
+%\renewcommand\rmdefault{psb}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Style (Changing the visual style of chapter headings and stuff.)
+%%
+\RequirePackage{titlesec}
+% [Fixes issue #34 (see https://github.com/cambridge/thesis/issues/34). Solution from: http://tex.stackexchange.com/questions/299969/titlesec-loss-of-section-numbering-with-the-new-update-2016-03-15
+\RequirePackage{etoolbox}
+\makeatletter
+\patchcmd{\ttlh@hang}{\parindent\z@}{\parindent\z@\leavevmode}{}{}
+\patchcmd{\ttlh@hang}{\noindent}{}{}{}
+\makeatother
+% end of issue #34 fix]
+\newcommand{\PreContentTitleFormat}{\titleformat{\chapter}[display]{\scshape\Large}
+{\Large\filleft\MakeUppercase{\chaptertitlename} \Huge\thechapter}
+{1ex}
+{}
+[\vspace{1ex}\titlerule]}
+\newcommand{\ContentTitleFormat}{\titleformat{\chapter}[display]{\scshape\huge}
+{\Large\filleft\MakeUppercase{\chaptertitlename} \Huge\thechapter}
+{1ex}
+{\titlerule\vspace{1ex}\filright}
+[\vspace{1ex}\titlerule]}
+\newcommand{\PostContentTitleFormat}{\PreContentTitleFormat}
+\PreContentTitleFormat
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% References (special style etc.)
+%%
+
+\RequirePackage[authoryear,round]{natbib}
+\usepackage[hyperpageref]{backref}
+\usepackage{cleveref}
+\usepackage{hyperref}
+
+\renewcommand{\backreftwosep}{ and~}
+\renewcommand{\backreflastsep}{, and~}
+\renewcommand*{\backref}[1]{}
+\renewcommand*{\backrefalt}[4]{
+    \ifcase #1
+        (Not cited.)
+    \or
+        (Cited on page~#2.)
+    \else
+        (Cited on pages~#2.)
+    \fi
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{libertine}
+\usepackage[libertine]{newtxmath}
+
+\usepackage{setspace}
+\setstretch{1.5}
+
+\let\openbox\relax
+
+\renewcommand{\ttdefault}{zi4}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Theorems, definitions, and examples
+%%
+\RequirePackage{amsthm}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}[chapter]
+%% Support for `Examples` (provides a counter for examples, the possibility to
+%% label and reference them etc.)
+%%
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}{Lemma}[chapter]
+\newtheorem{example}{Example}[chapter]
+\newtheorem{proposition}{Proposition}[chapter]
+
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+\let\Hungarian\H
+
+\newcommand{\Y}{\mathbf{Y}}
+\newcommand{\y}{\mathbf{y}}
+\newcommand{\M}{\mathbf{M}}
+\newcommand{\X}{\mathbf{X}}
+\newcommand{\A}{\mathbf{A}}
+\renewcommand{\L}{\mathbf{L}}
+\newcommand{\I}{\mathbf{I}}
+\renewcommand{\S}{\mathbf{S}}
+\renewcommand{\H}{\mathbf{H}}
+\newcommand{\T}{\mathbf{T}}
+\newcommand{\C}{\mathbf{C}}
+\newcommand{\U}{\mathbf{U}}
+\renewcommand{\C}{\mathbf{C}}
+\newcommand{\q}{{d_q}} % latent dim
+\newcommand{\kt}{\Tilde{k}}
+\renewcommand{\P}{\mathbf{P}}
+\newcommand{\R}{\mathbb{R}}
+
+\newcommand{\blu}{\textcolor{blue}}
+\newcommand{\red}[1]{\textcolor{purple}{#1}}
+
+\RequirePackage[small,bf]{caption}
+\RequirePackage{subfig}
+
+\graphicspath{{./figures/}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Glossary entries
+%%
+% Define a custom command for glossary entries
+\newcommand{\newmathglossaryentry}[3]{%
+  \newglossaryentry{#1}{%
+    name={\ensuremath{#2}},%
+    sort={#1},%
+    description={#3}%
+  }
+}
+
+\newmathglossaryentry{n}{n}{number of data points}
+\newmathglossaryentry{d}{d}{number of data dimensions}
+\newmathglossaryentry{dq}{\q}{number of latent dimensions}
+\newmathglossaryentry{X}{\X}{\textbf{explanatory} variable set, often \textbf{latent}, in $\mathbb{R}^{n \times \q}$}
+\newmathglossaryentry{Y}{\Y}{\textbf{response} data set, typically in $\mathbb R^{n \times d}$, with a row $\Y_{i}$ corresponding to a data point}
+\newmathglossaryentry{sim}{X \sim \mathcal{D}}{a random variable $X$ is sampled from / follows a distribution $\mathcal D$}
+\newmathglossaryentry{loss}{\mathcal{L}(\theta)}{a loss function, minimised w.r.t. $\theta$. Typically inversely related to a log-probability (or a lower bound on it) $\mathcal{L}=-\mathcal{E}$}
+\newmathglossaryentry{energy}{\mathcal{E}(\theta)}{a log-likelihood, evidence lower bound or similar function, maximised w.r.t. $\theta$}
+\newmathglossaryentry{prob-eval}{\log \mathcal{D}(x' | \theta, ...)}{the log probability (density) corresponding to a distribution $\mathcal D$ with parameters $\theta, ...$ evaluated at the value $x'$}
+\newmathglossaryentry{Sh}{\hat{\S}}{an estimate of an empirical data-data covariance matrix, for example, calculated as $\Y\Y^\top/d$ with centered data $\Y$}
+\newmathglossaryentry{Pr}{\hat{\boldsymbol{\Gamma}}}{an estimate of an empirical precision matrix, i.e. the inverse of a covariance matrix}
+\newmathglossaryentry{A}{\A}{a symmetric adjacency matrix}
+\newmathglossaryentry{L}{\L}{a graph Laplacian matrix}
+\newmathglossaryentry{GL}{\text{GL}}{a graph Laplacian matrix}
+\newmathglossaryentry{MN}{\M \sim \mathcal{MN}(\boldsymbol{\mu}, \boldsymbol{\Sigma}_r, \boldsymbol{\Sigma}_c)}{a matrix normal distribution with parameters $\boldsymbol{\mu}$, $\boldsymbol{\Sigma}_r$, $\boldsymbol{\Sigma}_c$. The following equivalence holds, $\text{vec}({\M}) \sim \mathcal{N}(\text{vec}({\boldsymbol{\mu}}), \boldsymbol{\Sigma}_c \otimes \boldsymbol{\Sigma}_r)$. In almost all cases in the thesis, we use the notation for summarising the following; if $\M_{:j}$ is the $j$-th column of $\M$ and has the following distribution independent to other random variables, $\forall j: \M_{:j} \sim \mathcal{N}(\boldsymbol{0}, \boldsymbol{\Sigma})$, then $\M \sim \mathcal{MN}(\boldsymbol{0}, \boldsymbol{\Sigma}, \I)$}
+\newmathglossaryentry{sphere}{\mathcal{S}^{\q-1}}{unit hypersphere in $\q$ dimensions}
+\newmathglossaryentry{vmf}{\text{vMF}}{von Mises-Fisher distribution}
+\newmathglossaryentry{W}{\mathcal{W}}{a Wishart distribution with a parametrisation such that, if $\S \sim \mathcal{W}(\M, \nu)$, then, $\mathbb{E}(\S) = \nu\M$}
+\newmathglossaryentry{Wi}{\mathcal{W}^{-1}}{an inverse-Wishart distribution with parametrisation such that, if $\S^{-1} \sim \mathcal{W}^{-1}(\M^{-1}, \nu)$, then, $\S \sim \mathcal{W}(\M, \nu)$}
+\newmathglossaryentry{cen}{\text{centrality parameter}}{assuming an (inverse-)Wishart distribution $\mathbf{M} \sim \mathcal{W}^{\{-1\}}(\mathbf{C}, \nu)$, we denote $\mathbf{C}$ as the ``centrality'' parameter (instead of the scale parameter as is done traditionally), as $\mathbb E(\mathbf{M}) \propto \C$}
+\newmathglossaryentry{I}{\I}{ identity matrix}
+\newmathglossaryentry{H}{\H}{ centering matrix $\H = \I - \mathbf{11}^T/n$}
+\newmathglossaryentry{pinv}{\M^+}{the Moore-Penrose pseudo-inverse of the matrix $\M$}
+\newmathglossaryentry{Ic}{\mathcal{I}}{indicator function}
+\newmathglossaryentry{p}{p}{a density function. We denote $p_\mathcal{M}$ to denote the density of a model $\mathcal{M}$ specified in the text, or a corresponding distribution, for example, $p_\mathcal{N}$ corresponding to the density of a normal distribution}
+\newmathglossaryentry{probability}{\mathbb{P}}{a probability measure. We sometimes denote the probability $\mathbb P(X\in A)$ as $\mathbb P_X(A)$ or $\mathbb P(X)$ when the set A is unimportant for exposition}
+\newmathglossaryentry{sigmoid}{\sigma(.)}{a sigmoid (inverse-logistic) or softmax function}
+\newmathglossaryentry{elem}{\odot}{element-wise multiplication}
+\newmathglossaryentry{kron}{\otimes}{Kronecker product}
+\newmathglossaryentry{reim}{\Re, \Im}{real and imaginary parts}
+\newmathglossaryentry{peq}{\overset+=}{$a\overset+=b \Rightarrow a = b + k$ for some uninteresting constant $k$}
+\newmathglossaryentry{ul}{\mathbf{U}, \boldsymbol{\Lambda}}{typically used for Eigenvectors and Eigenvalues of a matrix}
+\newmathglossaryentry{KL}{\mathrm{KL}(q\|p)}{Kullback---Leibler divergence between densities $q$ and $p$}
+\newmathglossaryentry{kern}{k(\cdot, \cdot)}{typically a kernel function. We denote the matrix shorthand as, $\Sigma = K(\X, \X)$ meaning that $\Sigma_{ij}(\X) = k(\X_i, \X_j)$}
+\newmathglossaryentry{psd}{\text{PSD}}{positive semi-definite}
+\newmathglossaryentry{expm}{\text{expm}}{matrix exponential. $\text{exp}$ refers to an element-wise exponential}
+\newmathglossaryentry{stop-grad}{\text{stop-grad}}{an operation $\text{stop-grad}[f(x)]$ sets the gradients of the argument $f(x)$, to zero}
+\newmathglossaryentry{semantic}{\text{semantic}}{applies to model assumptions or characteristics, referring to the ``in words'' meaning of the models (as opposed to its formal mathematical description). For example, the ``in words'' meaning of a log-normal distributed variable could be that a variable is positive with its log being symmetrically distributed. By semantic consistency, we mean that two models correspond to equivalent ``in words'' readings}
+\newmathglossaryentry{grammar}{\text{probabilistic grammar}}{probabilistic models forming grammars refers to the fact that many models, and probabilistic programming language statements translate to an ``in words'' description of a data characteristic being modelled}
+\newmathglossaryentry{knn}{\text{kNN}}{k-nearest neighbour (graph)}
+\newmathglossaryentry{major eigencomponents}{\text{major eigencomponents}}{the $\q$ major/principal eigenvectors and eigenvalues of a matrix $\S$ correspond to the largest $\q$ eigenvalues}
+\newmathglossaryentry{minor eigencomponents}{\text{minor eigencomponents}}{the $\q$ minor eigenvectors and eigenvalues of a matrix $\S$ correspond to the smallest $\q$ eigenvalues}
+\newmathglossaryentry{euc}{d^2(., .)}{the Euclidean distance metric, $d^2(\mathbf{x}, \mathbf{y}) = \| \mathbf{x} - \mathbf{y}\|^2$. We sometimes overload the notation by writing $d_{ij}^2(\X)$ to mean $d_{ij}^2(\X_i, \X_j)$}
+
+\usepackage{etoolbox}
+
+\newcommand{\dedicationpage}[1]{%
+  \cleardoublepage
+  \thispagestyle{empty}
+  \vspace*{\fill}
+  \begin{center}\emph{#1}\end{center}
+  \vspace*{\fill}
+  \cleardoublepage
+}
+
+% \makeatletter
+% \pretocmd{\tableofcontents}{
+%   \dedicationpage{For when one does not wish to abstract away a problem.}
+% }{}{}
+% \makeatother
+

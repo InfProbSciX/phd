@@ -1,0 +1,140 @@
+
+\section{Background on probabilistic modelling}
+\label{chp:bck-prob}
+
+In this section, we provide a brief overview of the building blocks of probabilistic and statistical modelling, vital to the exposition of model constructions and probabilistic interpretations that make up the majority of the thesis.
+
+Statistical modelling is a framework for science\footnote{There are many parallels between aspects of statistical modelling and the philosophy of science. For example, in classical hypothesis testing, one never ``proves'' a hypothesis, only fails to reject it, in accordance with ideas relating to falsification \citep{popper}. Inference results and hypotheses cannot be detached from the underpinning model, in accordance with ideas in the philosophy of science around theory-ladenness of observations and the Quine-Duhem thesis, which says that a hypothesis cannot be tested in isolation. Ideas such as Occam's razor and the strength of induction can be formalised within classes of models using model-fit evaluation metrics, such as likelihoods and information criteria. Moreover, the extent to which models represent the world, and whether they are to be understood simply as abstract models of logic that shed light on emergent phenomena, relate to ideas in scientific realism.}. A modeller follows the process illustrated in \cref{fig:background:stats}, by specifying a model representing variables of interest and their joint relationships, and performing inference given the model to say something about unobserved variables given the data, generating knowledge\footnote{Data analysis can also be seen as a special case of this process; for example, scatter plots represent visual estimators of a (conditional/joint) distribution's statistics.} \citep{bda3, pml}. Standard texts on statistical modelling cover the mathematical content of this section, including \cite{bda3, pml}.
+
+The section proceeds as follows. We will describe the basic mathematical setup of probabilistic modelling, then provide a commentary on building models and performing inference within them, and finally give a brief commentary on how models form high-level probabilistic grammars.
+
+\subsection{Mathematical setup}
+\label{bck:math}
+
+This subsection provides a brief mathematical overview of the terms used in the thesis. A variable of interest is typically represented as a \textbf{random variable}, defined as a function $X: \Omega \mapsto \mathbb{R}$, that represents an event $\omega \in \Omega$ as a real number, where $(\Omega, \mathcal{F}, \mathbb P)$ is a probability space; $\Omega$ represents the set of possible outcomes, $\mathcal{F}$ is the event space, representing events that may be observed. This set contains combinations of the elements/sets in $\Omega$, allowing for more complex questions to be posed regarding the probability measure. For example, $\Omega$ may contain six elements corresponding to the sides of a six-sided die, whereas the event space is the sets of subsets of $\Omega$ (formally, a $\sigma-$algebra), allowing one to define probabilities of events such as $\{6\}$---i.e., a die landing on a six, or $\{4, 5, 6\}$---i.e., the die landing on four or above. A probability measure finally, $\mathbb P : \mathcal{F} \mapsto [0, 1]$, is a function that maps elements of the event space $e \in \mathcal{F}$ to a number between zero and one. A \textbf{stochastic process} $\{X_t\}_{t \in T}$ is a collection of random variables, indexed by a set $T$.
+The probability measure must satisfy four key properties, attributed to Kolmogorov \citep{kolmogorov}.\footnote{The axiomatization of probability, disentangling it from the two main interpretations of probability in terms of aleatory and epistemic uncertainty, was a key development in the field.} The first three \textbf{axioms} are that,
+\begin{enumerate}
+    \item it is non-negative,
+    \item the probability of observing \textit{some} event in the event space is one, and,
+    \item the probability of observing one of a disjoint countable set of events is the sum of the probabilities of the events.
+\end{enumerate}
+The fourth is a \textbf{definition} that provides the grammar with which to reason about conditional probabilities and a way to compute the probability of an event given another, $\mathbb P(A|B) = \mathbb{P}(A\cap B)/\mathbb{P}(B)$.
+
+A probability density $p$ is a function that, if it exists\footnote{There are distributions that can be defined on sets that have no valid Lebesgue measure, and therefore, a density with respect to the Lebesgue measure cannot exist.}, obeys $\int_{x\in A} p(x) d\mu(x) = \mathbb{P}(X \in A)$, where $\mu$ is a measure (e.g. the Lebesgue measure), with respect to which $p$ is defined.\footnote{The definition of the probability density can be extended more generally as a Radon-Nikodym derivative, but this consideration is not needed for the work presented in this thesis.}
+As an example, consider a biased coin, with a probability of heads given by $\pi$. A model for observations of the coin may be represented by a collection of $n$ identically distributed random variables, $\{X_i\}_{i=1}^n$. As this sequence of variables is exchangeable (i.e. the joint distribution is invariant to permutation before the sequence is observed) and infinitely extendable, the theorem of De Finetti shows that there exists a \textbf{random variable} $\Pi$ that takes values in $[0, 1]$, such that $\forall i: X_i | \Pi \sim \text{Bernoulli}(\Pi)$; given $\Pi$, the sequence becomes conditionally independent and identically distributed. This shows the treatment of a ``parameter'' (the variable that determines a distribution's properties) as a random variable\footnote{As opposed to another historical treatment of them as constant unknowns, as seen in Bernoulli's theorem (a case of the weak law of large numbers), which shows that $\bar{X} \rightarrow \pi$ where $\pi \in [0, 1]$ is the unknown constant. The different methods are known as ``inverse-probability'' on account of the object $\mathbb P(\text{parameter}|\text{data})$ being the object that is studied, as opposed to $\mathbb P(\text{data}|\text{parameter})$. This is however tangential to the separate debate regarding the interpretation of probability as measuring epistemic or aleatoric uncertainty---both sides for which, historical cases exist, that made quantitative measurements of the probabilities.}. Bayes' rule provides a way to do induction, i.e. inference for the unobserved random variable $\Pi$, given the ones that are observed, $\X_i$s,
+$$\mathbb P(\Pi| X_1, \dots, X_n) \propto \mathbb P(X_1, \dots, X_n|\Pi) \mathbb P(\Pi). $$
+Here, $\mathbb P(O|U)$ is typically given by a \textbf{model}, and $\mathbb P(U)$ describes the expected \textbf{prior} behaviour of the unobserved variable before any data is seen. Having established the basic axioms of probability, we now look at how these rules are composed into the \textit{models} that form the basis of representation learning.
+
+\subsection{Probabilistic models}
+
+In this subsection, we describe briefly the usage of the term ``model'' within the thesis, before describing ideas of inference and probabilistic grammars. Probabilistic models enable communication of assumptions through explicit definitions of \textbf{what} is considered (i.e. random variables, stochastic processes) and \textbf{how} they behave---concretely through distributional assumptions, or through higher-level abstractions known to represent objects or processes of interest \citep{zoubin_pml, bda3}.
+
+We define a probabilistic or statistical model (used interchangeably), for the purposes of this thesis, as a collection of observed and unobserved random variables and the probability distributions that characterise them, where the random variables represent, at least approximately, a hypothesised/abstracted real-world process---a data-generating process. Unobserved parameters govern observed relationships, with the model describing the joint behaviour of all random variables within the abstracted process. The behaviour of some of the random variables of the model is typically the object of study, and this process is termed inference.
+
+\begin{figure}[ht]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \begin{tikzpicture}
+        \node[obs] (X) {$O_X$};
+        \node[latent, above=of X] (theta) {$U_\theta$};
+        \node[obs, left=of X] (y) {$O_y$};
+        
+        \edge{X}{y};
+        \edge{theta}{y};
+        
+        \node[above] at (current bounding box.north) {Generative Model \newline};
+        \end{tikzpicture}
+    \end{minipage}
+    \hspace{0.01\textwidth}
+    \vrule width 0.5pt
+    \hspace{0.01\textwidth}
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        {Inference} \\
+        $$
+        \underbrace{\overbrace{\textcolor[HTML]{FFA630}{p(U_\theta | O_X, O_y)}}^{\text{\textcolor[HTML]{FFA630}{unknown}}}}_{\text{\textcolor[HTML]{611C35}{posterior}}}
+        \propto
+        \overbrace{\textcolor{black}{\underbrace{p(O_y | O_X, U_\theta)}_{\text{\textcolor[HTML]{2E5077}{likelihood}}} \cdot \underbrace{p(\theta)}_{\text{\textcolor[HTML]{4DA1A9}{prior}}}}}^{\text{\textcolor[HTML]{97DE1C}{known form}}}
+        $$
+    \end{minipage}
+    \caption{An illustration of a simple statistical modelling process. A model, in this case for knowns $O_X, O_y$ and unknowns $U_\theta$, is first written out as a graph representing the data generating process, then, inference follows the determination of the posterior over the unobserved variables using what is known, using Bayes rule.}
+    \label{fig:background:stats}
+\end{figure}
+
+The Bayes' rule introduced in the previous subsection (\cref{bck:math}) is the central argument with which inference can be done in Bayesian modelling. \Cref{fig:background:stats} illustrates that the posterior over unobserved variables $U$ is calculated as being proportional to the ``likelihood'' and ``prior'' functions. The function $\mathbb P(O|U)$ is calculated as the probability density taken by the model as a function of the unobserved variables or parameters $U$($=U_\theta$ in \cref{fig:background:stats}), evaluated at $O$($=\{O_X, O_y\}$ in \cref{fig:background:stats}), and is the \textbf{likelihood}. The likelihood principle \citep{like-prin} posits that everything needed for the inference of $U$ related to the data $O$ is encoded by this function. The \textbf{prior} distribution encodes behaviour of the ``unknowns'' that is expected a priori, before experimentation\footnote{An example of a prior is a Gaussian process, used to represent a distribution over an unknown function \citep{gprw}. The distribution of the process can constrain the function space to smooth functions, periodic functions, etc.}. We now present how this function is used in practice to extract information about unobserved quantities.
+
+\subsection{Inference}
+
+In this section, we introduce ways in which, given a model, how inference about unknowns can be done. Inference typically involves understanding the behaviour of the posterior distribution of the variables with which we are concerned. Some model and prior combinations, yield analytical posteriors, allowing one to read off characteristics (e.g. moments) and use standard samplers to compute quantities such as expected values of downstream variables, accounting for the uncertainty in the variables over which inference is done. In most real-world cases however, this is not possible. Below, we focus on three key ideas on approximating the posterior: by obtaining a point estimate for the parameters at which the posterior density is maximised, or by using methods that sample approximately from the posterior, and finally approximating the posterior by an analytical distribution that is ``closest''.
+
+The following ideas can be motivated in several ways, for example, MAP estimation, which recovers point estimates, has a KL-minimisation view \citep{pml-i}. Another view follows by studying the behaviour of new data given the posterior, i.e., the posterior-predictive distribution, for example computed as $p(x^* | x) = \mathbb E_{p(\theta|x)}(p(x^*|\theta))$ when the posterior factorises appropriately. One can then approximate the expectation by assuming that the posterior is a Dirac-delta at the posterior-maximising value of the parameters.
+%
+Lastly, in the risk-minimisation view of Bayesian decision-theory, one computes risk across scenarios determined by a posterior, to marginalise out uncertainties from abstract parameters, and describe the behaviour of actionable variables. This can be formulated as a scalar risk of an action $A$, $R(A) = \mathbb{E}_{p(\theta|x)}(L(A, \theta))$, where $L$ is a \textit{loss function} that measures the cost of acting as per $A$. MAP estimation can be recovered using specific choices of the loss function.
+
+We start our presentation of inference ideas with point estimation of the parameters of the model---i.e. summarising the posterior over a random variable with one ``representative'' scalar.
+
+\subsubsection*{Maximum A-Posteriori Inference}
+
+Abbreviated ``MAP'' inference, this results in point estimates by maximising the posterior with respect to parameters,
+$$ \hat{\theta} = \underset{\theta}\argmax \log p(\theta|x). $$
+In this thesis, we use the terminology ``\textbf{maximum-likelihood estimation}'' to mean the point-wise estimation of parameters by simply maximising the likelihood function (equivalent to the MAP view when the prior over the parameters is proportional to one). This is somewhat in contrast to the term's historical context, as maximum-likelihood estimators in i.i.d. data contexts are known to be asymptotically consistent (achieving the true parameter value in probability, under identifiability constraints) and efficient (i.e. achieving the best possible variance, the Cram\'er-Rao lower bound). Most problems we study in the thesis do not correspond to the i.i.d. data regime, and they present with significant model unidentifiability; unidentifiability arises when multiple parameter combinations lead to the specification of the same model. Therefore the properties known of maximum-likelihood estimators do not hold in our settings.
+
+Although these estimates are often computationally tractable through optimisation, the likelihood/posterior may contain multiple local maxima (corresponding to different interpretations of the data), or multiple global maxima (where the posterior is invariant to certain transformations in the parameter space). This estimation method can also fail when there are variables that need to be integrated/marginalised out. In these scenarios, Type-II MAP/MLE (maximum likelihood) estimation, is typically used,
+$$ \hat{\theta} = \underset{\theta}\argmax \log p(x|\theta) = \underset{\theta}\argmax \log \int p(x, w|\theta) dw, $$
+which removes the effect of ``nuisance'' or uninteresting latent variables.
+
+Next, we consider cases where point estimates fail or do not provide enough information.
+
+\subsubsection*{Sampling, via Markov Chain Monte Carlo}
+
+Marginalisation of unobserved random variables may be needed if maxima with respect to the posterior distribution lie outside the typical set. Such a circumstance typically leads to uninteresting parameter choices that do not lead to good generalisation. Then, we sample directly from the posterior and analyse the behaviour of the distribution. Where the posterior does not have a known form, we use approximate sampling methods, for example, Markov-chain Monte-Carlo (MCMC) methods to build Markov chains of parameter samples, such that the marginal distribution of samples of these chains is proportional to the posterior. With samples obtained, one typically calculates expected values of statistics under the posterior distribution using Monte-Carlo,
+$$ \mathbb{E}_{p(\theta|x)}(f(\theta)) \approx n_s^{-1} \sum_{\theta \sim p(\theta|x)} f(\theta).$$
+Sampling sheds light on uncertainties and other characteristics of a posterior (e.g., alternative interpretations of the data, such as whether a smooth high noise model fits the data or whether a jagged low noise function does, as demonstrated in \cite{gprw}), but it can be computationally expensive, and where the posterior is complex, building practical samplers can be difficult. Building samplers with desirable properties is a key effort in modern computational statistics. Therefore, we may be interested instead to perform approximate inference by approximating the posterior by one that has an analytical form, as we show below.
+
+\subsubsection*{Variational Inference}
+
+When the treatment of uncertainty is desired but a full Bayesian treatment is computationally infeasible, we approximate a posterior using a simpler, analytically tractable distribution for reasons such as ease of understanding and sampling. In other scenarios, one may know the posterior factorises in a specific manner, and a variational posterior formulated according to that factorisation can aid in narrowing the search space for the posterior.
+
+Given a posterior over latent variables $z$ and parameters $\theta$, $p_\theta(z|x)$, we aim to find an approximate posterior parameterised by $\phi$, $q_\phi(z|x)$, such that the KL divergence $\text{KL}(q_\phi(z|x) || p_\theta(z|x))$ is minimised. The metric arises naturally when certain arguments involving log-probabilities are made.
+
+This divergence is often intractable, so we optimise a lower bound on the model evidence, known as the evidence lower-bound (ELBO). Consider the KL-divergence,
+\begin{align*}
+    \text{KL}(q_\phi(z|x) || p_\theta(z|x)) &= \int \log \dfrac{q_\phi(z|x)}{p_\theta(z|x)} q_\phi(z|x) dz \\
+    &= \mathbb E_q(\log q_\phi(z|x)) - \mathbb E_q \left(\log \dfrac{p_\theta(x|z) p(z)}{p_\theta(x)} \right) \\
+    &= \log p_\theta(x) - \mathbb E_q (\log p_\theta(x|z)) + \mathbb E_q \left(\log \dfrac{q_\phi(z|x)}{p(z)}\right) \\
+    &= \log p_\theta(x) - \underbrace{\left( \mathbb E_q (\log p_\theta(x|z)) - \text{KL}(q_\phi(z|x)||p(z)) \right)}_{ELBO} \geq 0.
+\end{align*}
+This shows that the term labelled the ELBO is less than or equal to the evidence. It also shows that, as the evidence $p_\theta(x)$ is constant w.r.t. $\phi$\footnote{The KL divergence is positive, therefore the ELBO forms a lower bound for the evidence even when we optimise for model parameters $\theta$.}, maximising the ELBO minimises the KL divergence between the approximate and true posteriors. Therefore, with variational inference, we specify an approximate posterior and turn the sampling problem into an optimization problem, wherein the ELBO is maximised as a function of $\phi$ and $\theta$. \textit{All} KL divergences in this thesis appear as the above---as backwards KL, $\text{KL}(q\|p)$.
+
+This concludes our presentation of inference ideas, and we now provide a brief commentary on probabilistic models corresponding to high-level logical statements.
+
+\subsection{Probabilistic grammars and software}
+
+Now that we have reviewed the mathematics of statistics, models and inference within them, we briefly provide a short commentary on a core motivation for our search for probabilistic interpretations, which is that probabilistic models can correspond to high-level modelling semantics (which we detail further in the background, particularly for PCA and ICA). This section provides a short list of such high-level semantics, which we also call high-level ``grammars'' (as concrete Backus-Naur grammars can be specified to translate between high-level ideas and statements used, and probabilistic models), frequently used when building probabilistic models. Our view follows \cite{jaynes}, who treats probability theory as the logical components of science. For us, a probabilistic grammar is a framework for composing this logic into complex models. Future work can uncover such semantics corresponding to the models presented in later chapters, specifically, what a ``covariance'' \text{means} in high-level terms, especially when constructed using binary data.
+
+Statistical models represent the subset of the world in which a scientist is interested, and statisticians typically design models based on known abstract grammars that are associated with specific collections of probabilistic statements. Moreover, scientific model pipelines are typically constructed by chaining together multiple semantic components. For example, consider the model class typical in regression (e.g. generalised linear and additive model, GLM and GAM) contexts:
+\tikz[baseline=(X.base), transform shape]{
+  \node[obs] (x) {$\mathbf{x}$};
+  \node[obs, right=of x] (y) {$y$};
+  \node[latent, right=of y] (t) {$\theta$};
+  \edge{x}{y};
+  \edge{t}{y};
+}.
+Given a positive random variable to model for example, in the absence of distributions derived from ground-up reasoning (e.g. limiting behaviour in the underlying physical systems), one may choose a Gamma distribution (an exponential family distribution) as it corresponds to a maximum-entropy distribution with a specific mean and mean-log. Alternatively, if the tails of the log-distribution will be symmetric, one would choose a log-normal, and a Pareto to model fat-tailed or extreme-value distributions.
+
+Statisticians use such high-level semantic abstractions to construct their models, and hence we may lay out grammars that can abstract away such decisions to make a wide variety of models available for common use. For instance, software such as BRMS \citep{brms} acts as a compiler for a high-level probabilistic programming language (PPL, see \cite{intro-ppl} for an introduction to the topic) with a syntax,
+% frame=lines, linenos 
+\begin{minted}[fontsize=\small]{r}
+target_statistic {| hyperparameters = ...} ~ covar_a + s(covar_b)
+\end{minted}
+that translates high-level parameter relationships to concrete probabilistic models within the Stan ecosystem \citep{stan-old}.
+Such a syntax completely abstracts away distributional choice and functional form for the relationship between statistics of the distribution to covariates, through a link function and parametric functions represented by \texttt{s}. Such grammars can describe a very large class of statistical models with a hierarchical structure, and are transpiled to lower level PPLs, where the specification of more fine-grained statements is possible, but a statistician would typically still rely on some level of abstraction to choose distributional assumptions for their data. We see PPLs (and other implementations) on at-least three levels, high-level grammars that allow for models to be specified by domain-experts, middle-level grammars that allow for finer specification of assumptions, but such that the probabilistic statements are still easy to communicate\footnote{For example, if a coin toss is modelled as a Bernoulli distribution with a probability parameter based on the mass distribution of a coin, it is easy to communicate why this model construction was chosen.}, and low-level implementations that cater for bespoke/complex modelling or inference needs.
+
+As we describe the models presented in this thesis, we will aim to consider the \textbf{middle-layer of modelling semantics}: what real world assumptions do models implied by widely-used representation methods correspond to? We will show that, in the case of dimensionality reduction methods, these semantics correspond to covariance estimation using Wishart models or edge-detection using Bernoulli models, using logical parameterisations (in that a statistician would choose those models naturally, given the characteristics of the data at hand). We leave the exploration of higher-level semantics (e.g. what truly does a nearest neighbour graph estimated using zero-inflated data correspond to? Does it measure co-occurrence/co-activation rates?) for future work.
+
+As we consider these questions, it is useful to keep in mind that models can be written as multiple equivalent sets of statements, with certain representations that may lend themselves to model extensions that are more intuitive given a problem.\footnote{Compound distributions are an example; a normal distribution with an exponentially distributed variance, for example, is equivalent to a Laplace distribution. A logistic regression can be interpreted to be a real-valued latent variable model, with an observation model that forces the latent variables to take categorical values. These models lend themselves more naturally to extensions, e.g. to ordinal regression.} Therefore, we argue, a description of multiple interpretations of one algorithm can be useful as different interpretations may lend themselves to different use-cases. In \cref{part:ii}, we show that t-SNE-like algorithms can have three different interpretations, a minimal Bernoulli interpretation that can be understood with ease, a Wishart interpretation that makes the model comparable to others (e.g. GPLVM), and a KL-minimisation view that lends itself to other use-cases, such as transformers as explored in \cref{chp:probdr-nn}.
+
+Abstracting from models to their semantic representations can make these models more accessible, especially to domain experts, to use statistical methods for their work. We motivate our search for a unified interpretation for dimensionality reduction methods and beyond, not only due to ease of transferability across implementation platforms (powered by PPLs at some level of abstraction), but also to work towards a semantic representation of the algorithms used in the field.
+
+In this section, we have reviewed the mathematical basis of probabilistic modelling, how inference can be done, and we shared a view that portrays useful probabilistic models as ones that can correspond to natural language. In the next section, we show how probabilistic interpretations can come about, before reviewing projective and generative models for representation learning, and presenting a discussion of algorithms without any known probabilistic interpretations.

@@ -1,0 +1,80 @@
+\section{Projective representation learning}
+\label{chp:bck-proj}
+
+Now that we have presented the mathematical background, we review existing probabilistic representation learning methods used in the field to contextualise our core work, by categorising the methods into two groups: \textbf{projective} and \textbf{generative} methods. Projective methods generally follow the rule, data $\rightarrow$ representations, as opposed to generative methods that act in the reverse direction.
+%
+The split is not a rigid one, as equivalences exist between many projective methods and their generative counterparts (e.g. logistic regression and linear discriminant analysis). In practice, the difference between the two views reduces to whether a notion of non-statistical independence exists in one direction, i.e. whether the pair $p(y|x) \text{ and } p(x)$ is more reasonable to describe the joint density as opposed to the pair $p(x|y) \text{ and } p(y)$. In causal settings as an example, one of these directions may be easier to specify or be such that the quality of decomposition may be invariant to new data\footnote{For more on the topic, see the principle of Independent Causal Mechanisms, \cite{icm}.}.
+
+In this section, we also mention various case-studies of data analysis in science and show that in every case, \textbf{constraints} enable effective analysis. The section is categorised as: \textbf{fixed projections} that create representations as user-defined functions of the data, \textbf{learned projections} that have been fit to predict metadata, and \textbf{density estimators} that create a vectorised representation of data-points in order to estimate their log-density. The former being an example of supervised learning, and the latter unsupervised or self-supervised. To conclude the chapter, we provide ideas that bridge projective and generative methods---specifically how classifiers implicitly act as generative models and equivalences that exist between generative and projective methods. We present these equivalences to highlight two major properties of probabilistic models, that inspires the aspects of our framework we introduce later in the thesis. The properties are that probabilistic models preserve their logical properties under transformations, and that models intended for a use-case may find themselves being applicable in an entirely different setting, highlighting their use.
+
+\subsection{Fixed projections}
+\label{proj:fixed}
+
+This subsection highlights the first of our three views on projective representations. As a basic form of representation generation and dimensionality reduction, \textbf{random projections} map high dimensional vectors $\mathbf y \in \mathbb R^d$ to representations $\mathbf x \in \mathbb R^\q$ linearly, i.e.,
+$$ \X = \Y \mathbf Z, $$
+where $\mathbf{Z}\in \mathbb R^{d \times \q};\mathbf Z_{ij} \sim \mathcal{N}(0, (1/\sqrt{q})^2)$ is a randomly generated matrix. The Johnson-Lindenstrauss lemma \citep{jl_lemma} states that such projections approximately preserve distance matrices in the lower dimensional space. Furthermore, due to the central limit theorem, such projections can also make the distribution of the data Gaussian-like under regularity assumptions, which may make them more applicable for downstream methods that make strong distributional assumptions.
+
+Other common projections include fixed featurisation functions that convert inputs to real-representations that are interpretable or are known to preserve properties of the input that depend on the domain. For example, in a case study involving call identification of Titi-monkeys for conservation efforts, we show in \textcontrib{\cref{app:cases:monke}} that there exist human-engineered auditory representations of speech spectrograms. These are low-dimensional and effective despite being engineered for human speech. Such representations allow for small but effective models to be developed for tasks such as activity detection (where the problem is, given a short sequence of audio, the task involves whether or not it corresponds to a call).
+
+Another example of fixed projections are feature vectors describing non-conventional data, such as graphs. One way to go about featurising such data is to consider a vector that stores information as to whether or not certain substructures are present in the graph, and such transformations can in many cases be interpreted as feature functions \citep{graph_kern}. Such interpretations are useful from a computational point of view as feature functions are modular and can slot into software, for example, to construct kernels for Gaussian processes, which we show in \textcontrib{\cref{app:cases:graph-kern}}.
+
+Featurisers are not commonly fixed however, and are learned to predict metadata or data density, as we show below.
+
+\subsection{Projections that learn metadata}
+
+This subsection highlights the second of our three views on projective representations. Many methods of representation learning involve a function acting on the data $f(\mathbf y)$, which is learnt to predict the metadata related to a sample point, for example, a classifier using image data to predict data-point type.
+%
+Assume that $f$ is set up in such a way that $f(\mathbf y) := \sigma(\mathbf w^T \mathbf r(\mathbf y))$, where $\mathbf r$ is a vector formed as part of the function f, and an optional non-linearity/inverse-link/activation function $\sigma$. The vector $\mathbf{r}(\mathbf y)$ can then be used as a representation of the input $\mathbf{y}$. A reason to use representations ``closer'' to the linear predictor is if we expect that they are disentangled; however, for models in audio, \cite{semantic-layering} show that ``deeper'' layers of self-supervised learning models encode semantics while ``shallower'' layers encode signal-related information (acoustics). As an example of a trained projection model, BERT \citep{bert} is trained to output probabilities corresponding to masked portions of inputs within text.
+
+Constraints that lead to powerful representations within such function classes are highly studied, for example, the effect of constructing functions (or generative models) that are invariant or equivariant to classes of transformations reflecting real-world properties that the models are used to describe \citep{se3}. Convolutions used for images and graphs are another example \citep{gcn, alexnet}, that constrain the search space by explicitly looking for learned filters useful for downstream processing of images.
+
+Sometimes, there is no metadata available with a sample point, and unsupervised or self-supervised methods can be used to learn a featuriser used within density-estimation contexts, as we discuss next.
+
+\subsection{Projections that learn densities}
+\label{proj:ssl-ood}
+
+Lastly, as an alternative to learning relationships between aspects of the data, fixed featurising functions $f$ can be optimised instead to output the (log) probability density of observing a data point $\mathbf y$ in high dimensional space. \textbf{Noise contrastive estimation} (NCE) of \cite{nce} is an example of a framework for learning functions that estimate log densities of input vectors directly as a function of the data $f(\mathbf y)$. With NCE, one transforms density estimation into a supervised learning problem by training a classifier to distinguish between samples from the data distribution and samples drawn from a known ``noise'' distribution.
+%
+Assume that the data is sampled from a density $p_\mathbf{x}$, and that we seek to estimate it using an unnormalised density function $p^u_{\boldsymbol{\alpha}}$ with parameters $\theta = \{{\boldsymbol{\alpha}}, z\}$, where $\log \int p_{\boldsymbol{\alpha}}^u(\mathbf{v}) d\mathbf{v}=Z(\alpha)$, of which $z$ will be an estimate. Density estimation with NCE is done by sampling $\mathbf{x}$ using the empirical data distribution, as well as a known noise distribution $p_n$. We treat the number of positive and negative samples as equal for ease of exposition, although this number can vary in practice and constitutes a hyperparameter. In NCE, we then train a classifier to distinguish between the data and noise samples using the model,
+$$ \mathcal I(\mathbf v \sim p_\mathbf{x}) | \mathbf{v}, {\boldsymbol{\alpha}}, z \sim \text{Bernoulli}(\sigma(\log p_{\boldsymbol{\alpha}}^u(\mathbf v) - z -\log p_n(\mathbf{v}))). $$
+\cite{nce} show that the optimisation of this model's likelihood results in the recovery of the true parameters that describe the data log-density, under class and identifiability conditions. NCE forms the basis of many self-supervised learning methods, and many functions within such models, being density estimators or approximations thereof, can be used to \textbf{measure the out-of-domainness of input examples}. This contrasts with the intended use of some of these methods, which are motivated as models that construct representations as opposed to providing literal log-densities of inputs.
+
+Explicitly, probabilistic classifiers \textit{can} be more uncertain about outputs corresponding to out-of-domain inputs, thereby offering a way to interrogate out-of-domain-ness (when calibrated). This seems to be true for both general classifiers as well as explicit noise contrastive models. In \textcontrib{\cref{app:cases:mos}} and \textcontrib{\cref{app:cases:ppp}} we show that contrastive model and large language model uncertainties can be used as proxies for out-of-domainness estimation, for speech and protein property prediction respectively, in line with literature. In these contexts however, we found that performing Monte-Carlo dropout \citep{mcd} leads to better performance even when the models were not trained with dropouts.
+
+This concludes our presentation of projective methods, as fixed featurisers based on domain-knowledge, learned functions of metadata or data densities. Before we present the generative models however, we reiterate that the split introduced is not a rigid one and there are connections between generative and projective methods. Before concluding the section, we show one such connection.
+
+\subsection{Connecting projective and generative models}
+
+So far, we have seen projective methods corresponding to fixed and learned functions predicting metadata or data densities. Before our exposition of generative models, in this subsection, we briefly present an example highlighting that projections can act as posteriors of generative models, thereby bridging the two views.
+%
+\begin{example}[LDA]
+A classical example follows, linear discriminant analysis (LDA). Assume a generative model for the data as a mixture of normal distributions that share a covariance (with the different clusters corresponding to different classes). Concretely, LDA assumes a generative model for a specific data point,
+$$ c \sim \text{Categorical}(\boldsymbol\pi) \text{ and }\mathbf{x} \sim \mathcal N(\boldsymbol{\mu}_c, \boldsymbol{\Sigma}).$$
+This describes the joint distribution $p(\mathbf x|c) p(c)$. The posterior over which class a data-point corresponds (i.e. the distribution $p(c|\mathbf x)$) is a logistic regression \citep{pml-i}. Assuming two classes, $C=2$, the posterior probability is calculated as,
+\begin{align*}
+    p(c|\mathbf{x}) &= \dfrac{p(\mathbf{x}|c) p(c)}{\sum_i^C p(\mathbf{x}|i) p(i)} \\
+    &= \dfrac{1}{1 + p(\mathbf{x}|\not c) p(\not c)/p(\mathbf{x}|c) p(c)} \\ &= \sigma(\log p(\mathbf{x}|c) p(c) - \log p(\mathbf{x}|\not c) p(\not c))  := \sigma(\delta_c(\mathbf{x}));
+\end{align*}
+this matches the form of a logistic classifier, as the form of classification boundary is,
+\begin{align*}
+    \Rightarrow \delta_c(\mathbf{x}) &= - 0.5(\mathbf{x} - \boldsymbol{\mu}_c)^T \boldsymbol{\Sigma}^{-1}(\mathbf{x} - \boldsymbol{\mu}_c) + 0.5(\mathbf{x} - \boldsymbol{\mu}_{\not c})^T \boldsymbol{\Sigma}^{-1}(\mathbf{x} - \boldsymbol{\mu}_{\not c}) + (\log\pi_c - \log\pi_{\not c}) \\
+    &= (\boldsymbol{\mu}_c - \boldsymbol{\mu}_{\not c})^T\boldsymbol{\Sigma}^{-1}\mathbf{x} + (- 0.5(\boldsymbol{\mu}_c - \boldsymbol{\mu}_{\not c})^T \boldsymbol{\Sigma}^{-1}(\boldsymbol{\mu}_c + \boldsymbol{\mu}_{\not c}) + \log\pi_c - \log\pi_{\not c}),
+\end{align*}
+which is linear in $\mathbf{x}$.
+\label{sub:lda-perspective}
+\end{example}
+LDA also pops up in connection to other widely-used algorithms too, for example, Otsu thresholding \citep{otsu} used for image segmentation shares a connection to k-means clustering \citep{otsu-kmeans} and therefore the generative model used in LDA. \Cref{app:cases:otsu} shows an example of the method for cell-background segmentation.
+
+% fv: Isnt this quite well nown ?  remember bring taugth this in 2nd year of undergrad . 
+
+% fv: Also more general formulations beyond LDA , are quite well known ? the density estimator trick https://blog.shakirm.com/2018/01/machine-learning-trick-of-the-day-7-density-ratio-trick/ same logistic regr formulation
+
+% fv: with things like this id make sure to credit / cite them as well known/ foundational things and not "we posit/propose"
+
+The idea that classifiers store information about the data's distribution is studied widely, for example, in \cite{classifier_as_gen}. Another example of a connection between classifiers and generative models can be found in the context of density ratio estimation, when classifiers learn to predict between samples drawn from a true-data distribution and another. In such cases, the optimal classifier learns to estimate a log density ratio between the distribution of the true data, and that of the second distribution. NCE \citep{nce} and other density estimators (Sec. 14.2.4 of \cite{esl}) make use of this fact, and such ideas can explain the behaviour of discriminative classifiers of GANs \citep{dens-ratio-gan}.
+
+In \textcontrib{\cref{app:cases:lda-ood}}, we show another such idea, that, assuming the generative model for LDA, the classifier confidence is a direct proxy to how far we are from the mode of the class, leading to an explanation for the connection between confidence and data-point log-likelihood.\footnote{The intuitive idea is that the log probability decreases towards the class boundary/linear separator faster than it increases as one moves away from the separator. Thinking of an isotropic sphere representing the data log density for a class, we can reason that on a contour of equal log-density there is a sharper fall off in the density towards the boundary than away from it.} Those results, however, do make the strong assumption that the assumptions of LDA are valid.
+
+The relationship demonstrated is not universal. Generative models can assign higher likelihoods to out-of-domain examples as (at least one reason being that) statistical OOD-ness is different to semantic OOD-ness \citep{ood_weirdness}. Discriminative models can also assign high confidence to out-of-distribution inputs, an effect seen commonly through adversarial examples.
+
+Having seen how projective methods construct representations directly as functions of the data (via fixed featurisations and learned functions for metadata or densities), in \cref{chp:gen-bck}, we will switch to a generative view of representation learning. Generative methods will be models that work with an explicit probabilistic data-generating mechanism that explain observations using latent variables, making data-level assumptions transparent and enabling uncertainty quantification. This presentation will then culminate in the question, where should classical methods for dimensionality reduction sit? By considering this question later in the thesis, we will also show what probabilistic principles underpin the methods that follow.

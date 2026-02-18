@@ -1,0 +1,90 @@
+\section{Dimensionality reduction and neighbour embedding algorithms}
+\label{chp:bck-nea}
+
+Before we conclude the chapter, we provide a brief exposition of classical dimensionality reduction methods (without existing probabilistic interpretations), to contrast them to the probabilistic methods presented thus far, which obtain (typically low-dimensional) vector representations of data. These do not have a trivial positioning within our taxonomy of models, and these algorithms will be the focus of our effort for the rest of the thesis.
+
+Many of these algorithms use associations known between points to cluster them together in the latent space, thereby preserving the graph structure that implicitly or explicitly underpins the data. We organise the algorithms as follows. The first and second categories are algorithms that work with high-dimensional data points and act as dimensionality-reduction algorithms. Algorithms of the first category use an eigendecomposition of a matrix of data-data similarities to form a low-dimensional representation. Those of the second category create a graph of similarities using a (sometimes implicit) nearest neighbour algorithm and then match the distances in a latent graph to the distances implied by the data graph, using a graph matching objective that does not simply have a squared error form (which the eigendecomposition cases correspond to). The third category we describe are relational embeddings, where one has access to pairs or triplets of points that are ``similar'', for example, words that are close together in text, or a triplet of words such that a combination of two words conveys a similar meaning to a third, e.g. ``woman'' and ``ruler'' conveying ``queen''. Another possibility is data points that can be related to others when the latter are defined by similarity-preserving transformations of the former, e.g. horizontal flips of natural-context images.
+
+We describe dimensionality reduction as a \textbf{data analytical goal}---the majority of our interpretations for the DR algorithms below will be latent variable models that achieve the goal of dimensionality reduction. A ``dimensionality reduction model'' in this thesis is a latent variable model whose primary use is dimensionality reduction but can be used for other use-cases. As an example, dual-probabilistic PCA may be used for DR if only some latents that explain the highest variation in the data are kept, but it may also be used for rebalancing the variation in the data so that useful low-variance dimensions \textit{have a larger say} (PCA-whitening is an example of this process).
+
+With this in mind, we first describe dimensionality reduction methods before turning our attention briefly to relational embedding methods and ideas therein.
+
+\subsection{Dimensionality reduction algorithms}
+
+The first of our two categories, these algorithms, in their simplest formulation, aim to find embeddings $\mathbf{x} \in \mathbb R^\q$ corresponding to data-points $\mathbf{y} \in \mathbb R^d$ with $\q << d$.
+
+%f: Add a citation for this , bengio has a seminal paper for difing disentanglement in terms of derivatives and then there are others for causal latents.
+
+In the field of single-cell transcriptomics (scRNA-seq) as an example, one measures the number of RNA molecules that are present in droplets of cytoplasm from single cells, that give us an idea of what genes are being expressed in the cell \citep{scrna-whatis}. This forms the high-dimensional dataset. It is hypothesised that there are typically a low number of causal factors that determine such high-dimensional observations, hence, a dimensionality reduction step is a central part of many pipelines to identify such factors \citep{scrna-pipeline}. For these reasons, it is said that these datasets lie near ``low-dimensional manifolds'', albeit with a lot of ``noise'' due to both observational/experimental reasons, and uncertainty from unobserved variables (representing aspects of aleatoric and epistemic uncertainty respectively).
+
+Although disentangled and causally meaningful low-dimensional representations are the most desired outputs of dimensionality reduction methods, these can be difficult to find, and often can only be achieved through strong scientific or modelling assumptions (constraints). Nonetheless, low-dimensional representations are still useful for downstream processing as they are generally more tractable (from computational and interpretability standpoints, but also as downstream models may be more robust to model misspecification with lower-dimensional inputs) and information dense when compared to their high-dimensional counterparts.
+
+Many dimensionality reduction algorithms are used within single-cell data analysis pipelines (and beyond), but they lack explicit modelling semantics and there is no consensus as to what they truly \textit{do}. A probabilistic framework would serve to explain such algorithms, as we show in \cref{part:ii}, and perhaps form the basis for future study of the methods. 
+
+We now describe our two views of DR algorithms: ones that use eigendecompositions of PSD matrices, and others that optimise a loss function based on a (sometimes implicit) nearest-neighbour graph. These will specifically be SNE, t-SNE and UMAP.
+
+\subsubsection{Eigendecomposition-based methods}
+
+A large class of widely-used DR methods involve obtaining a low dimensional representation of the data as the eigenvectors of a covariance-like matrix or a graph Laplacian matrix. As an example, Laplacian Eigenmaps of \cite{lap-eigenmaps} constructs a graph Laplacian matrix from a k-NN graph, and constructs a low-dimensional embedding as the non-trivial eigenvectors corresponding to the smallest eigenvalues of this matrix. Other examples of such methods include the dual formulation of PCA, introduced in the previous section. They are described in more detail in \cref{probdr:lin:connections} along with their probabilistic interpretations. In the coming sections, we detail the other class of DR algorithms which use a probabilistic graph matching objective to construct a low-dimensional embedding.
+
+\subsubsection{Stochastic neighbour embedding}
+The stochastic neighbour embedding (SNE) algorithm was introduced by \cite{sne} as an approach for dimensionality reduction. The approach was to minimise a KL divergence between a set of probabilities $v^{S}_{ij}$ (corresponding to two data points $i$ and $j$ being neighbours) generated by a discrete distribution in a data space $\Y$ and a discrete distribution with probabilities $w_{ij}^{S}$ generated by using a lower dimensional latent embedding $\X$. These probabilities are defined as,
+\begin{align*}
+    v_{ij}^{S} &= \frac{\exp(-\|\Y_{i:} - \Y_{j:}\|^2/\sigma_i^2)}{\sum_{k\neq i} \exp(-\|\Y_{i:} - \Y_{k:}\|^2/\sigma_i^2)}, \\
+    w_{ij}^{S} &= \frac{\exp(-\|\X_{i:} - \X_{j:}\|^2)}{\sum_{k\neq i} \exp(-\|\X_{i:} - \X_{k:}\|^2)},
+\end{align*}
+where $\mathbf{Y}_{i:}$ denotes the $i^\text{th}$ row of $\Y$, and $\sigma_i$ is a hyperparameter that is found by information-theoretic arguments. Probabilities $w_{ij}^{S}$ are made close to probabilities $v_{ij}^{S}$ by minimising the objective below with respect to $\X$,
+\begin{align*}
+    \mathcal L_{SNE} = \sum_{i} \sum_{j\neq i} v_{ij}^{S} \log  \frac{v_{ij}^{S}}{w_{ij}^{S}}.
+\end{align*}
+The idea is that if probabilities defined in latent space are similar in terms of the KL divergence to probabilities defined in data space, then the latent dimensions of $\X$ are capturing some salient aspect of the data $\Y$. In all three algorithms, probabilities of association relating to the same point, $v_{ii} \text{ and } w_{ii}$, are set to zero. This algorithm was succeeded by t-SNE, which follows.
+
+\subsubsection{t-distributed stochastic neighbour embedding}
+The t-SNE algorithm was introduced by \cite{tsne} to improve optimisation and visualisation with respect to SNE. In the t-SNE algorithm, probabilities $v_{ij}^{t}$ and $w_{ij}^{t}$ are defined as,
+\begin{align*}
+    v_{ij}^{t} &= (v_{ij}^{S} + v_{ji}^{S})/2n, \\
+    w_{ij}^{t} &= \frac{(1 + \|\X_{i:} - \X_{j:}\|^2)^{-1}}{\sum_{k\neq l} (1 + \|\X_{k:} - \X_{l:}\|^2)^{-1}},
+\end{align*}
+which are then matched by minimising the cost function below with respect to $\X$,
+\begin{align*}
+    \mathcal L_{t-SNE} = \sum_{i\neq j} v_{ij}^{t} \log  \frac{v_{ij}^{t}}{w_{ij}^{t}}.
+\end{align*}
+%
+The normalization here, as opposed to SNE, is over the entire set of probabilities. Next, we review the UMAP algorithm.
+
+\subsubsection{Uniform manifold approximation and projection}
+The UMAP algorithm \citep{umap} is used extensively in computational biology for visualising single-cell RNA-seq data due to decreased runtimes and a greater ability of recovering cell clusters as compared with t-SNE \citep{umap-nature}. The algorithm defines probabilities $v_{ij}^{U}$ and $w_{ij}^{U}$ as
+\begin{align*}
+    v_{j|i}^{U} &= \exp((\rho_i-\text{distance}(\Y_{i:}, \Y_{j:})) / \sigma_i), \\
+    v_{ij}^{U} &= v^U_{i|j} + v^U_{j|i} - v^U_{i|j} * v^U_{j|i}, \\
+    w_{ij}^{U} &= (1 + a\|\X_{i:} - \X_{j:}\|^{2b})^{-1},
+\end{align*}
+where $\rho_i$ denotes the distance to the nearest neighbour of data point $i$. We match these by optimising the following cost function with respect to $\X$,
+\begin{align*}
+    \mathcal L_{UMAP} = \sum_{i\neq j} v_{ij}^{U} \log  \frac{v_{ij}^{U}}{w_{ij}^{U}} + (1-v_{ij}^{U}) \log  \frac{1 - v_{ij}^{U}}{1 - w_{ij}^{U}},
+\end{align*}
+i.e. a cross-entropy type loss matching a latent graph to one created by using the high-dimensional data points.
+
+We can also use, for example, a \textbf{Poincar\'e metric} or in general hyperbolic distance metrics within such algorithm (or model) constructions, instead of the Euclidean metric. Hyperbolic surfaces are well-suited to representing trees with low distortion, and so these geometries form natural real-valued spaces within which tree-structured data can be embedded to expose underlying similarity behaviour \citep{hyperbolic}. Similarly, data embedded into hyperspheres can recover periodic/cyclical behaviour.
+
+In the next subsection, we show similar algorithms to t-SNE and UMAP that are not strictly dimensionality reduction algorithms, but have a very similar form. We will use ideas from these methods in \cref{part:ii}, to show that approximate inference can be done in our framework that seeks to explain t-SNE-like algorithms.
+
+\subsection{Relational embeddings}
+\label{sec:relational-embeddings}
+
+This subsection presents the third set of algorithms, after eigendecompositions and t-SNE-like algorithms, that construct embeddings in contexts that are not quite as simple as reducing the dimensionality of a dataset of i.i.d. points. They instead work with contexts where data points have temporal or relational connections, used widely in the context of word embeddings. Although we do not detail careful probabilistic interpretations of these algorithms in this thesis, they can be seen to be highly similar in construction to dimensionality reduction methods such as (t-)SNE and UMAP. Ideas relating to efficient inference within such settings are also reviewed briefly, as \textbf{they will be used to construct efficient inference options for our probabilistic interpretations}---thereby showing (in \cref{chp:probdr-nonlin}) that within the realm of probabilistic models, insights from certain models can be translated easily to other cases. Relational embeddings learn representations directly from observed similarity relationships or co-occurrences.
+
+\paragraph{Word2vec using SGNS:} Given a word represented by an integer $i$ and context $j$, skip-gram with negative sampling (SGNS) of \cite{sgns} maximises a logistic classifier's log-probability over edges vs sampled non-edges, with respect to latent embeddings $\mathbf w_i$ and $\mathbf c_j$,
+$$\mathcal E_{ij} := \log \sigma(\mathbf{w}_i^T\mathbf{c}_j) + n_\mathrm{neg} \mathbb E_{k \sim p_{\text{neg}}} \log \sigma(-\mathbf{w}_i^T\mathbf{c}_k). $$
+%
+The negative sampling was specifically inspired by noise contrastive estimation of \cite{nce}. \cite{sgns-svd} show that optimising this objective is approximately equivalent to maximising the pointwise mutual information; in expectation, the stationarity condition gives
+$ \mathbf{w}_i^T\mathbf{c}_j \approx \operatorname{PMI}(w_i,c_j)-\log n_\text{neg}$ and hence, the argument follows that a singular value decomposition of the PMI matrix on the right-hand-side produces reasonable latents.
+
+\paragraph{TransE:}
+Given a triplet, $(\boldsymbol u, \boldsymbol h, \boldsymbol v)$, TransE introduced by \cite{transe}, minimises the objective,
+$$\mathcal L = \sum_{\mathbf{u, h, v} \in S} \sum_{\mathbf{u', v'} \sim p_{\text{neg}}} \left[ \gamma +d(\boldsymbol u + \boldsymbol h, \boldsymbol v) - d(\boldsymbol u' + \boldsymbol h, \boldsymbol v') \right]_+$$
+thereby learning embeddings such that, approximately, \(\mathbf{u}+\mathbf{h}\approx\mathbf{v}\).
+
+This concludes our presentation of algorithms that currently do not have interpretations as inference algorithms within probabilistic models. The methods presented in this section appear differently to probabilistic methods as there is no explicit construction of a model. We presented methods of dimensionality reduction through eigendecomposition and loss-minimisation on a graph. We then presented methods for obtaining word embeddings that follow similar ideas.
+%
+To recap the background, we have presented a review of probabilistic models and probabilistic models for representation learning, and in the next chapter, we formulate the probabilistic interpretations to the algorithms of this section, by showing how these objectives correspond to (lower bounds on) explicitly defined models' likelihoods. Our consideration of these ideas will lead to a framework that unifies ideas in scientific representation learning, to provide a framework with which one can compare, constrain and extend models based on use-case.

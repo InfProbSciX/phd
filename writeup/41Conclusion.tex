@@ -1,0 +1,48 @@
+\chapter{Conclusion of Thesis}
+
+In the thesis, we posed the question: is there a probabilistic model that explains methods in scientific representation learning? We found that the answer, from various case-studies and probabilistic interpretations of the methods, to be that latent variable models of similarity---the ProbDR models---underpin the methods studied in this thesis, including neural architectures. Moreover, \textbf{estimators} constrain large aspects in the latent variable models, specifically, the \textbf{what} that is modelled. A summary of the key ideas presented is as follows.
+
+We started with the background. In \cref{chp:bck-interp}, we showed how probabilistic interpretations can be formed: by interpreting algorithms as optimisation algorithms of certain objectives, with those objectives being interpreted to be either likelihoods of probabilistic models, or as lower-bounds on related quantities, such as the evidence-lower bound. We showed that the latter (variational) interpretations appear when the optimised variable is on the left hand side of a sampling statement (i.e. when the derived model statement looks like $f(\text{variable}) \sim \text{fixed distribution}$) or when the derived model statement seems circular (i.e. as $\Y \rightarrow \dots \rightarrow \Y$). In the former case specifically, the variational perspectives can provide a generative picture. Lastly, we pointed out that the variational constraints do not form approximate posteriors in the sense of variational inference, but act as a form of observation and define a model class. In \cref{chp:bck-proj}, we reviewed ``projective'' methods of representation learning that correspond to model classes of the form $\Y \rightarrow \X$, and showed how they explicitly construct estimators for aspects of data that are valuable (which can include estimators of data density, or vectors that preserve data distances). We showed how Monte-Carlo dropout can improve zero-shot scalar-property prediction with models that are estimators of data density, presumably for calibration reasons. In \cref{chp:gen-bck}, we presented some generative models (i.e. of the form $\X \rightarrow \Y$) for representation learning, and showed that many methods in science constrain aspects of such models by explicitly estimating/constraining aspects of the latent variable models through prior knowledge. In \cref{chp:bck-nea}, we then presented dimensionality reduction algorithms that form latents using eigendecompositions, and neighbour-embedding methods that perform probabilistic graph-matching to obtain latents. We mentioned that these do not fall easily into the taxonomy of models we described earlier in the chapter.
+
+\Cref{part:ii} formed the core of the thesis. In \cref{chp:probdr-lin} and \cref{chp:probdr-nonlin}, we showed that most classical methods of dimensionality reduction are MAP inference methods assuming the model,
+$$ \S | \X \sim \mathcal{W}^{\{-1\}}(\X\X^T + \beta K(\X, \X) + \gamma \I, \nu), $$
+where all hyperparameters are fixed, and where the main difference across different algorithms arises from the estimator of the covariance $\S$. We posited that the estimated statistic is minimal in many methods, in the sense that it estimates only a specific small aspect of the data. For example, if the covariance is estimated as $\S = \L^+$, the covariance must only be a function of the nearest neighbour graph, which may correspond to different high-level concepts (such as zero occurrence rates) depending on the distribution of the data. We showed that, in the case of (t-)SNE/UMAP-like algorithms, an intermediate interpretation that gives rise to the above statement is an explicit edge-detection model,
+$$ \A_{ij} \sim \text{Bernoulli} \left(\Tilde{\epsilon} \dfrac{1}{1+\Tilde{s}d_{ij}^2(\X)} \right).$$
+We show that embeddings found by our interpretations resemble those of t-SNE-like algorithms. We then showed in \cref{chp:probdr-nonlin} that these are semantically coherent models (e.g. because the kNN graph only has a few edges, $\tilde{\epsilon}$ ensures that the average probability of adjacency is small). Moreover, we showed that our probabilistic interpretations hint towards an SGNS-kind algorithm that, although not very qualitatively similar to CNE, shows that there may be a link between models of the form,
+$$ \text{\texttt{transformed data}} \sim \text{\texttt{linear model}} \text{ and } \text{\texttt{raw data}} \sim \text{\texttt{non-linear model}}.$$
+In \cref{chp:var-probdr}, we showed that the models with MAP interpretations above can be interpreted to be KL-minimising algorithms assuming a variational framework illustrated below. \\
+\begin{center}
+\begin{tikzpicture}
+\node[latent] (A) {$\M$};
+\node[latent, above=of A] (X) {$\X$};
+\edge{X}{A};
+\node[above] at (current bounding box.north) {model \newline};
+\end{tikzpicture}
+\qquad
+\begin{tikzpicture}
+\node[obs] (A) {$\M$};
+\node[obs, above=of A] (Y) {$\Y$};
+
+\edge{Y}{A};
+
+\node[above] at (current bounding box.north) {variational constraint};
+\end{tikzpicture}
+\end{center}
+
+Finally, in \cref{chp:probdr-nn}, we showed that transformers and SSL correspond to inference within a similar variational framework to ProbDR. Concretely, we showed that transformers correspond to unrolled inference assuming our variational model underpinning Laplacian Eigenmaps, where the softmax operation estimates an adjacency matrix (and through it, a graph Laplacian), the skip-connection is the first part of the gradient descent step $\X \leftarrow \X + \eta \nabla_\X \mathcal E$, and the latter part forms the gradient of the ELBO. Moreover, we argued that stop-grad elements within this process, and the variational frameworks corresponding to SSL, correspond to the fact that the variational constraints are treated as observed random variables estimating some aspect of the data. We show that our derivations suggest that a negative graph Laplacian should be used in place of the standard attention matrix, and that this architecture change increases performance on two tasks. Future work can explore whether these ideas can be used for neural architecture search, or at least to reason about other frameworks with.
+
+Before concluding the thesis, we provide a brief summary of the other future directions discussed in the thesis.
+
+\section{Summary of future directions}
+
+First and foremost, in the thesis, we introduced a probabilistic framework that estimates certain quantities of interest using non-traditional estimators. Identifying what \textit{exactly} they estimate in context-specific terms, e.g. what is retained in a kNN graph built from zero-inflated data, is left for future work. Transforms of the data may exist such that the sample covariance approximately retains only the information contained in the pseudo-inverse of the graph Laplacian. A study of this will shed light into building simpler models that estimate directly the aspect of the data that one is interested in.
+
+Secondly, studying natural gradients in ProbDR, Bayesian decision-theoretic interpretations of the framework and sampling behaviour within it may unlock new methods of inference of latent variables.
+
+Thirdly, the thesis uses coarse approximations in many places, tighter approximations of our ideas may shed light into whether it is possible to show differences between interpretations leading to t-SNE-like or UMAP-like behaviour. Moreover, better analytical inference algorithms may exist for inference within models that underpin t-SNE-like methods.
+
+Lastly, in the context of explaining neural architectures using ProbDR, non-linear (kernelised) probabilistic models of dimensionality reduction may increase performance in models with lower latent dimensionality. Furthermore, these ideas may enable discovery of new architectures via consideration of gradient descent in more specialised/context-specific latent variable models. We also note that, as transformer embeddings are typically high-dimensional, the emergence of linear ``concept directions'' predicted by the linear representation hypothesis may make linear latent-variable interpretations surprisingly effective. Future work can study whether kernelised ProbDR variants can provide benefits when the embedding dimension is constrained.
+
+\textbf{To conclude,} the core contributions of the thesis, with respect to the wider field, were the introduction of the ProbDR framework that unifies many methods in classical dimensionality reduction, and explain aspects of neural architectures, from a probabilistic perspective, and is the first of its kind to do so. Secondarily, we showcased many case-studies in science and showed how one can approach them through a probabilistic lens, how one constrains models in practice, and how existing ideas in the field can be extended.
+
+I hope that the thesis is a valuable reference providing case-studies for approaching various problems in scientific representation learning and for those wishing to understand various representation learning methods from a probabilistic perspective. The ideas presented in this thesis can be developed, to further understand what the various methods model in a high-level semantic sense, to improve the approximations made, and find new model frameworks or architectures using the ideas presented.

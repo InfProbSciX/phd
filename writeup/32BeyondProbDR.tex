@@ -1,0 +1,251 @@
+\chapter{Connecting ProbDR to SSL and Transformers}
+\label{chp:probdr-nn}
+
+The core claim of the thesis is that representation learning methods are inference methods of probabilistic models which can be framed as variational frameworks with a fixed variational target representing observations. In the previous chapters, we have seen that classical dimensionality reduction methods can be explained as inference algorithms corresponding to a probabilistic model. In this chapter\footnote{This chapter is based on \mecite{probdr_t}.}, we show that transformers perform unrolled inference in the ProbDR's Laplacian Eigenmaps model introduced in the last section, and that our interpretations suggest principled architecture modifications that lead to better performance using nanoGPT. The chapter serves as a core validation of the ProbDR framework, due to its ability to explain architectures beyond classical DR.
+
+Concretely, we will show that single-head transformers at initialisation can be thought of as unrolled optimisation of (the ProbDR) KL-divergence via gradient descent assuming a probabilistic Laplacian Eigenmaps model, which suggests that there should be a \textbf{graph Laplacian term in the place of an adjacency matrix}---our proposed change of architecture. A graphical abstract of the major idea is presented in \cref{fig:trans-ga}, illustrating that an operation involving a skip connection in the architecture is interpreted to be the first term of gradient descent in $\X \leftarrow \X - \eta\nabla_\X \mathcal L$, with the second operation corresponding to the gradient of a term of a probabilistic objective.
+
+The chapter is structured as follows. In the background, we present the transformer architecture of \cite{transformer}, and the work of \cite{whitebox-transformer}, a view presenting \textbf{(white-box) transformers} as unrolled inference within probabilistic models that is instrumental to our work. Their results show that, assuming a probabilistic model on the representations, performing gradient descent on a probabilistically-inspired (the sparse rate reduction) objective leads to each gradient descent step mirroring the actions of a transformer block. Our main idea is that the softmax operation can be derived assuming our ProbDR model behind Laplacian Eigenmaps. We also present the interpretations of \cite{ssl_as_vi} that frame some self-supervised learning methods as KL-minimising algorithms assuming explicit probabilistic models, and we show how their interpretations follow ideas of ProbDR. Then, we use the ideas presented in the background to modify the white-box transformer model and show another interpretation that uses our variational form of probabilistic Laplacian Eigenmaps from the previous section, that provides an alternative explanation for how the softmax operation arises within the transformer. Finally, we show that an architecture modification, simply subtracting an identity matrix from the attention matrix (thereby performing graph diffusion or Laplacian smoothing in the attention step), arises naturally from this view. We show that this architectural change can achieve higher performance on language models and a vision transformer fit on the tiny Shakespeare \citep{tiny-shakespeare}, OpenWebText \cite{openwebtext}, and the downsampled Imagenet datasets \citep{imagenet, imagenet_downsampled} respectively.
+
+This chapter validates the main thesis claim by showing that our interpretations are useful in a different use-case to their original motivation, demonstrating the power of probabilistic models.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.75\linewidth]{illustrations/trans_ga.pdf}
+    \caption{A graphical abstract of the idea that unrolled optimisation corresponds to a transformer step, showing that skip connections (in blue) inside transformer blocks are interpreted as the first term of gradient descent ($\X \leftarrow \X - \eta \nabla_\X \mathcal {L}$), with the rest of the architecture interpreted as the derivative of a log-posterior. There are two skip-connections, corresponding to alternating optimisation between a data-dependent term in the negative log-posterior $\mathcal L_d$ and a regularising term in the negative log-posterior $\mathcal L_r$.}
+    \label{fig:trans-ga}
+\end{figure}
+
+\section{Background}
+
+In this section, we present ideas that are necessary for the exposition of our main idea. We present a brief introduction to the transformer architecture of \cite{transformer}, and an overview of the Laplacian Eigenmaps interpretation of the ProbDR framework which will give rise to the attention block. Then, we present the white-box transformer work of \cite{whitebox-transformer}, which forms the basis of our interpretation, and finally, we present the work of \cite{ssl_as_vi} that show the correspondence between SSL algorithms and variational methods, ideas that we will borrow for our interpretation.
+
+\subsection{The transformer architecture}
+
+Transformers are extensively used general-purpose architectures that have enabled large-scale high-performance models used for language as part of Large Language Models (LLMs), such as BERT \citep{bert}, for vision (using vision transformers, ViTs, \cite{vits}), and foundation models for speech (e.g., wav2vec, \cite{wav2vec2}). Transformers update embeddings successively by constructing a matrix that guides which tokens should meaningfully interact, rather than using fixed connectivity constraints as in CNNs and RNNs. They are flexible, as they can be used to model long-range dependencies in sequential data, interactions between patches of images, etc.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.4\linewidth]{figures/probdr_c/transformer.png}
+    \caption{A simplified transformer architecture considered in this work, showing that the architecture consists of an initial embedding layer reducing the dimensionality of the input, with every subsequent block involving an attention step and a feed-forward step, both of which are then followed by a normalisation.}
+    \label{fig:transformer}
+\end{figure}
+
+In this work, we use a simplified version of the transformer architecture, one without separate encoder and decoder blocks---we simply just use encoder blocks, as used in BERT \citep{bert}, and one with single attention heads, for simplicity of exposition. The simplified architecture is illustrated in \cref{fig:transformer}; with our simplifications, the architecture first embeds a high-dimensional data point split into $n$ tokens $\X \in \mathbb R^{n\times d}$ into $\mathbb R^{n\times\q}$, and adds a positional encoding to differentiate token positions. Then, the embedding is passed into one of several blocks, made of two sub units. In the first unit, an attention matrix is computed that estimates how different tokens relate to each other, capturing dependencies between the tokens. The tokens may represent parts of an image, or a temporal sequence, and contributions of the identified ``neighbours'' are added to the token's embedding. Then, the embedding is normalised for stability reasons. Mathematically, the operations are as follows,
+\begin{align*}
+  \A &\longleftarrow \sigma\left(\sqrt{\q^{-1}}\X\mathbf{W}_\mathrm{q} \mathbf{W}_\mathrm{k}^T \X^T + \mathbf{M}\right) \\
+  \X &\longleftarrow \X + \A \X \mathbf{W}_\mathrm{v} \\
+  \X &\longleftarrow \text{LayerNorm}(\X).
+\end{align*}
+Then, as part of the second unit, the embeddings are passed through a feed-forward network, and another normalisation layer,
+\begin{align*}
+  \X &\longleftarrow \X + \text{FeedForward}(\X) \\
+  \X &\longleftarrow \text{LayerNorm}(\X).
+\end{align*}
+These embeddings are then processed in simple ways downstream, for example, a single layer acting as a regression or classification head.
+
+In our work, we interpret the attention matrix as an adjacency matrix of a nearest-neighbour graph and show that unrolled optimization in a dimensionality reduction model leads to the transformer architecture. Prior work has studied the interpretation of attention matrices as matrices of data-point similarity or relevance; \cite{transformer} and many works since, for instance, \cite{lillog_attention, attention-beyond-viz}, have visualised attention matrices corresponding to text inputs, image patches, etc., for the purposes of interpretability. Recent work has interpreted the attention matrix as an adjacency matrix and shown that graph convolutions improve the performance of the architecture \citep{graph_conv_transformer}. In parallel, we show that the graph diffusion steps can also increase the performance of the architecture. In the realm of graph convolutional networks, \cite{gcn} (based on results in part of \cite{cnn-spec}) motivate their architecture from a spectral graph convolutional perspective, and using a slightly different derivation of their updates, we find that an update involves a graph Laplacian term of the form $\theta_0 \mathbf{x} + \theta_1\L \mathbf{x}$, similarly to the ideas presented in this chapter. More recently, \cite{ch_gnns} laid out transformer attention matrices as fully connected graph adjacencies to relate transformers to graph attention networks of \cite{gat}.
+
+Next, we present the ideas of the white-box transformer, as we heavily borrow ideas from their work, to show that each block of the transformer is one step of gradient descent assuming the probabilistic model underpinning ProbDR.
+
+\subsection{Transformers as unrolled optimisation}
+
+We now summarise the idea of \cite{whitebox-transformer}, who base some of their work on ideas from ReduNet \citep{redunet}, on how transformers correspond to unrolled optimisation.\footnote{Transformers can also be seen to perform gradient descent within in-context settings, as explored by \cite{icl}.} The following ideas will form the main methodology of the chapter. Assume a random variable representing the post-embedding representation $\X \in \mathbb{R}^{n\times \q}$, where $\q$ is the number of latent dimensions and $n$ is the number of tokens corresponding to a data point (of image patches, text tokens, etc.) to which rows of the representations $\X$ correspond. Unrolled optimisation of a probabilistically inspired objective, assuming a probabilistic model on $\X$, specifically that each $\X_i$ is sampled from a Gaussian mixture model, leads to each gradient descent step resembling the operations in a block of a transformer. In other words, transformers perform unrolled inference assuming a probabilistic model that learns representations. The objective used to derive these results is an objective inspired by ideas in information theory, compression and linearity of representations; termed the sparse rate reduction objective $\mathcal E$,
+$$ \mathcal E(\X) = \frac{1}{2}\sum_k \underbrace{-\log\det \left( \I + \frac{p}{n\epsilon^2} \X^T \U_k^T \U \X \right)}_{\mathcal E_\mathrm{data}} + \underbrace{\log\det \left( \I + \frac{\q}{n\epsilon^2} \X^T \X \right)}_{\mathcal E_\mathrm{reg}},$$
+where $p$ is the subspace dimension that bases $\U_i$ (which make up the attention parameters) act within, $K$ is the number of mixture components, giving rise to $K$ heads of multi-head attention. Optimisation of this objective with respect to $\X$ using gradient descent with $m$ steps can be unrolled as a sequence of random variables,
+$$ \X_{i.} \overset{T_{i.}}{\longrightarrow} \X_{ii.} \overset{T_{ii.}}{\longrightarrow} ... \overset{T_m}{\longrightarrow} \X_m. $$
+Within each step of gradient descent $T_{i.}$, optimisation is tackled in two steps, one that optimises the first term involving $\U$, and another step that optimises the regularising second term (alternating optimisation). The first step consists of steps that make up the first step of the transformer block involving attention, and the second step leads to the second block of the transformer involving the feedforward network. The softmax results from an approximation of a matrix inverse that appears in the gradient of the first term w.r.t. $\X$. Mathematically\footnote{assuming the simplification of the architecture---assuming a single head.},
+\begin{align*}
+    T_i &= \begin{cases}
+        \X_{ii.} \longleftarrow \X_{i.} - \eta \nabla_{\X_{i.}} \mathcal E_\mathrm{data} \\
+        \X_{ii.} \longleftarrow \X_{ii.} - \eta \nabla_{\X_{ii.}} \mathcal E_\mathrm{reg}
+    \end{cases} \\
+    \implies T_i &\approx \begin{cases}
+        \X^T_{ii.} \longleftarrow \text{LayerNorm}(\gamma_a\X_{i.}^T + \gamma_b \mathbf{U}^T\mathbf{U}\X_{i.}^T \text{softmax}(\X_{i.}\mathbf{U}^T\mathbf{U}\X_{i.}^T) \\
+        \X^T_{ii.} \longleftarrow \text{LayerNorm}(\text{ReLU}(\mathbf{R}\X^T_{ii.} + \mathbf{C}))
+    \end{cases},
+\end{align*}
+where $\gamma$s are constants, $\mathbf{R}$ is an orthogonal matrix, and $\mathbf{C}$ is a constant matrix.\footnote{The second step above is an approximation to the ISTA step, given in eqn. 92 of \cite{whitebox-transformer}.}
+Due to the representations being latent, the model considered in \cite{whitebox-transformer} can also be thought of as a mixture of principal component analysers\footnote{in a dual sense---acting on the latent ``coordinates'' and not the components.}, therefore suggesting that transformers perform inference within a linear (non-kernelised) latent variable model. In our work, we focus on single-head attention, and provide a different perspective on how the softmax arises. Instead of a Gaussian model on the latents, if our interpretation of Laplacian Eigenmaps in its variational formulation is used, the softmax term arises as an approximation of a data adjacency matrix. In the next subsection, we briefly recap the pertinent ProbDR results from \cref{part:ii}.
+
+\subsection{A recap of ProbDR's Laplacian Eigenmaps}
+\label{lap-eigenmaps}
+
+Before moving onto our main result, we briefly recap ProbDR's variational Laplacian Eigenmaps formulation, which forms the basis of our interpretation. Laplacian Eigenmaps of \cite{lap-eigenmaps} is a dimensionality reduction algorithm that reduces the size of a dataset $\Y \in \mathbb R^{n \times d}$ to a smaller matrix of representations $\X \in \mathbb R^{n \times \q}, \q << d$. The probabilistic Laplacian Eigenmaps model is a probabilistic interpretation of the algorithm (i.e. a model, inference within which leads to the algorithm in question). It can be written as follows, where a Wishart distribution is placed on a precision matrix, of which the symmetrically normalised graph Laplacian $\L$ is an estimate,
+$$ \nu*\L(\Y) \sim \mathcal{W} ((\X\X^T + \beta \I)^{-1}, \nu). $$
+MAP inference for latent embeddings $\X \in \mathbb R^{n \times \q}$ in this model is equivalent to KL minimization over a random variable $\boldsymbol{\Gamma}$, where the model and variational constraints are written as,
+$$ \log p(\boldsymbol{\Gamma}) = \log \mathcal{W} (\boldsymbol{\Gamma} | (\X\X^T + \beta \I)^{-1}, \nu), \qquad \log q(\boldsymbol{\Gamma}) = \log \mathcal{W} (\boldsymbol{\Gamma} | \L(\Y), \nu), $$
+where $\L(\Y) \in S^n_+$ is a graph Laplacian matrix encoding a k-nearest neighbour graph, calculated using the data $\Y$. The model graph can be drawn as,
+\begin{center}
+\begin{tikzpicture}
+\node[latent] (A) {$\boldsymbol{\Gamma}$};
+\node[latent, above=of A] (X) {$\X$};
+\edge{X}{A};
+\node[above] at (current bounding box.north) {model \newline};
+\end{tikzpicture}
+\qquad
+\begin{tikzpicture}
+\node[latent] (A) {$\boldsymbol{\Gamma}$};
+\node[obs, above=of A] (Y) {$\Y$};
+
+\edge{Y}{A};
+
+\node[above] at (current bounding box.north) {variational constraint};
+\end{tikzpicture}
+\end{center}
+The maximum of ELBO w.r.t $\X$, which simplifies as $-\text{KL}(q(\boldsymbol{\Gamma})\|p(\boldsymbol{\Gamma}))$, is attained when the latent embeddings are estimated as follows,
+$$\hat{\X} = \U_\q \Bigl( \boldsymbol{\Lambda}^{-1}_\q - \beta \I_\q \Bigr)^{1/2} \mathbf{R},$$
+where $\U_\q$ are the $\q$ eigenvectors of the graph Laplacian corresponding to the smallest non-zero eigenvalues encoded within the diagonal matrix $\boldsymbol{\Lambda}$, and where $\mathbf{R} \in O(\q)$ is an arbitrary rotation matrix. With an additional constraint, $\X^T\X = \I$, the optimal estimate becomes,
+$$\hat{\X} = \U_\q \mathbf{R}.$$
+This is a consequence of the trace minimisation theorem, as the objective is simply $\text{tr}(\L\X\X^T)$. Any arbitrary rotation still remains a solution as the objective and the constraint are invariant to rotations.
+In the case that we constrain the embeddings to have column norm one ($\X^T\X=\I$), assuming that the empirical mean of the embeddings is zero, the empirical variance of the embeddings (across the data points) is equal to $\sum_k \hat \X_{kj}^2/n = 1/n$. We will use this fact to initialise the transformer in an experiment (\cref{expt:trans-mnist}).
+
+Lastly, before we present our main results, we briefly review an interpretation of SSL as variational methods, as these ideas will be useful for our main exposition.
+
+\subsection{A variational interpretation of SSL}
+
+In this final subsection, as part of the background, we make a short digression to show how the model graph of ProbDR appears in the wider representation learning field, as self-supervised methods follow a very similar graph. Ideas from this section will be used to argue for why gradients with respect to certain terms (interpreted to be under \GLS{stop-grad}) do not appear in our derivation. Let $\Y^a_i, \Y^b_i, ...$ be augmentations/views/modalities of a data point. SimSiam, introduced in \cite{simsiam}, is a self-supervised learning method that constructs representations of the data by minimising the negative inner product,
+$$\mathcal{L}_i = -\sum_{m_a, m_b} f(h(\Y^{m_a}_i))^T \red{f(\Y^{m_b}_i)},$$ where the element in red is under \GLS{stop-grad}, and with $f(\Y^m_i), f(h(\Y^m_i)) \in \mathcal S^{\q-1}$. \cite{ssl_as_vi} show that this loss function has a variational interpretation, where, if,
+\begin{align*}
+    p(\X_i|\Y_i) &\propto \prod_m \text{vMF}(\X_i | f(h(\Y^m_i)), \kappa), \\
+    q(\X_i|\Y_i) &\propto \sum_m \delta(\X_i| \red{f(\Y^m_i)})
+\end{align*}
+Then,
+$$ \Rightarrow \text{KL}(q||p) \overset+= -\mathbb E_{q(\X_i|\Y_i)}(\log p(\X_i|\Y_i)) = - \sum_{m_a, m_b} f(h(\Y^{m_a}_i))^T \red{f(\Y^{m_b}_i)} = \mathcal{L}_i. $$ 
+Due to the \GLS{stop-grad} applied to the elements of the loss that form the variational constraint, we posit that the model graphs are similar to ProbDR, in that the variational constraint is treated as an observed random variable.\footnote{The model graph implied by the specification of $p$ and $q$ as above, is as we saw in \cref{probdr:approx-inf-as-vi}, where a static variational constraint simply encodes the observed data statistic, and the function of the data that appears within the model is a variational posterior over latent variables. Therefore, viewed from a ProbDR perspective, we see the SSL framework as doing two things: defining the observed random variable through a variational constraint, and also performing variational inference for the latent random variable that appears in the model. This perspective may allow for specifying SSL methods that are full-form.}
+%
+We see the variational constraint as approximating a reasonable embedding of the data \textit{at every iteration} of the optimisation process. As an example, if $f$ were initialised as a random projection of the data, then certain properties of the data are retained in the resulting embedding (due to the Johnson–Lindenstrauss lemma). If an optimisation step corresponding to the model preserves/improves these properties (and does not make $f$ degenerate or collapse), we can rely on the variational constraint to always provide an approximate but valid ``view'' of the data for the model to approach. In fact, \cite{edge-byol} show that in models similar to BYOL \citep{byol} with a linear projector head, the projection step corresponds to a PCA update, leading to a ``sensible'' target, in that a majority of the variance in the data will be preserved. The PCA-like effect of the predictors is also noted in \cite{direct-pred}. We apply a similar principle, arguing that the variational constraint is a static statistic, in \cref{sec:main}.\footnote{We note in passing that the objective of SimSiam, when focusing specifically on the predictors, can be written as $\mathcal L = - \text{tr}(\Y_b^T\Y_a \Tilde{\mathbf{W}})$. With a constraint on the weights, this is the objective of canonical correlation analysis \citep{cca}, for which, there exists a pPCA-like probabilistic interpretation, due to \cite{pcca}. This may offer yet another method to see that the prediction layers of SSL-like methods can have a spectral solution, based on inference in a probabilistic model.}
+
+With these components---the transformer architecture and the ProbDR interpretation of Laplacian Eigenmaps---we are now positioned to derive our main result in the coming section: that the two are approximately equivalent under a variational view. In doing so, we provide an alternative explanation as to how the softmax arises in the attention step in a transformer.
+
+\section{Transformers as unrolled inference in ProbDR}
+\label{sec:main}
+
+In this section, we present an alternative interpretation to that of \cite{whitebox-transformer}, that shows that transformers perform gradient descent on a variational objective derived using a variational form of the probabilistic Laplacian Eigenmaps model.
+
+Firstly, rewrite the random variable corresponding to latents as $\mathbf{Z}$ (which will be the random variable that is marginalised in the variational step), and treat $\X$ as a parameter that encodes latent positions. Further, we add a prior to the model constraining the latents as is done with large neural networks,
+$$ \log p(\boldsymbol{\Gamma}, \mathbf{Z}) = \log \mathcal{W} \left(\boldsymbol{\Gamma} | (\mathbf{Z}\mathbf{Z}^T + \beta \I)^{-1}, \nu\right) + \log \mathcal{U^*}(\mathbf{Z}). $$
+$\mathcal{U^*}$ is a matrix von-Mises-Fisher distribution (a uniform distribution over matrices, with rows that lie on a $\q$-dimensional hypersphere), with an additional constraint that for every row $\mathbf{x}$, $\sum_i^\q x_i = 0$ (the rows have zero mean, and hence the coordinates lie on a hyperplane). Projected optimisation with this prior will lead to LayerNorm steps during optimisation.
+%
+Then, we force the random variable $\mathbf{Z}$ to take values $\X$ a.s., and we modify the calculation of the graph Laplacian used in the variational constraint, so that it is a function of the latents $\mathbf{Z}$ and not the data $\Y$,
+$$ q(\boldsymbol{\Gamma}, \mathbf{Z}) = \mathcal{W} (\boldsymbol{\Gamma} | \Tilde{\L}(\mathbf{Z}), \nu) * \delta(\mathbf{Z} | \X). $$
+%
+The graph Laplacian is computed as $\Tilde{\L} = \I - \Tilde{\A}(\mathbf{Z}) = \I - \sigma(\kappa\mathbf{Z}\mathbf{Z}^T - \M)$ where $\sigma$ is the softmax function, applied row-wise (so that the row sums of the input matrix all equal one). $\Tilde{\A}$, we argue, is a soft (differentiable) proxy to the true nearest neighbour adjacency matrix, particularly when the latent embeddings $\X$ are initialised with PCA or random projections, as $\X\X^T$ is a minimal-error estimate of the empirical covariance of the data, and the covariance between similar points is expected to be similar in value. This leads to the row-wise softmax being similar and high for similar points, encoding a similarity structure. $\Tilde{\L}$ is a random-walk (left) normalised graph Laplacian, with $\Tilde{\A}$ having an interpretation of a transition matrix. Similarly to our approach in \cref{sec:diff-maps}, we ignore the asymmetry of the matrix as it shares eigencomponents with the symmetrically normalised graph Laplacian, which defines the Laplacian Eigenmaps result. $\M$ is a mask matrix (for example, if we were to disallow self-adjacency, $\M$ can be set to $\iota \I$, with $\iota \rightarrow \infty$), and $\kappa$ is a hyperparameter that can be tuned such that the proxy adjacency $\Tilde{\A}$ is ``close to'' a reference nearest neighbour matrix. Even when $\mathbf{M}$ is asymmetric, the ELBO below is a function of only a symmetric matrix\footnote{Let $\text{Sym}(\L) = 0.5(\L + \L^T)$. This is because, $\text{tr}(\L\mathbf{P})$ with asymmetric $\L$ follows,
+$$ \text{tr}(\text{Sym}(\L)\mathbf{P}) = 0.5 \text{tr}((\L + \L^T) \mathbf{P}) = 0.5\text{tr}(\L\mathbf{P}) + 0.5\text{tr}(\mathbf{P}\L) = \text{tr}(\L\mathbf{P}). $$}.
+
+In a similar fashion to ProbDR, and the variational interpretation to SimSiam, we treat the variational constraint as an observed random variable, and hence do not account for gradient updates w.r.t. $\X$ leading from terms corresponding to the variational constraint. Hence, the KL-divergence with \GLS{stop-grad} applied to the variational constraint is,
+\begin{align*}
+    \mathrm{KL} \bigl(q(\boldsymbol{\Gamma}, \mathbf{Z})\|p(\boldsymbol{\Gamma}, \mathbf{Z})\bigr) &\propto
+    \underbrace{\mathrm{tr}\bigl(\tilde \L(\X\X^T + \beta \I)\bigr)}_{\mathcal{L}_{\text{data}}} -
+    \underbrace{\log\det(\X\X^T + \beta \I)}_{\mathcal{L}_{\text{reg}}} + c,
+\end{align*}
+where $\forall i: \X_i \in \mathcal{S}^{\q-1} \text{ and } \sum_j \X_{ij}=0$. In the white-box transformer work, a transformer block's sequence of updates follows gradient descent of an objective in steps; given an objective $\mathcal{L}(\X) = \mathcal{L}_{\text{data}}(\X) - \mathcal{L}_{\text{reg}}(\X)$, where a transformer block (at initialisation) calculations correspond to an alternating optimisation process involving the updates,
+\begin{align*}
+    \X' \longleftarrow \X - \eta * \dfrac{d\mathcal{L}_{\text{data}}}{d\X}, \qquad \X \longleftarrow \X' + \eta * \dfrac{d\mathcal{L}_{\text{reg}}}{d\X'}.
+\end{align*}
+%
+Furthermore, in our work, we ignore the positivity constraint that leads to the ReLU activation, which forms a part of the fully connected segment of the transformer for ease of exposition; however, this can be re-added simply by incorporating a sparsity prior used with the white-box transformer, as our regularization term is identical to theirs, the sparsity terms notwithstanding.
+
+We now show how an (encoder) transformer block's operations\footnote{With a single head as previously noted; we believe that this can be extended by considering a multiple-expert type distribution as part of the variational constraint.} arise as optimisation steps of our objective. First, observe that,
+$$\dfrac{d\mathcal{L}}{d\X} = 2\Tilde{\L}\X = 2(\I - \Tilde{\A})\X$$
+and so, a gradient descent update for optimisation of $\mathcal{L}_\mathrm{data}$ follows,
+\begin{align*}
+    \X &\longleftarrow \X + 2\eta(\sigma(\kappa\X\X^T - \M) - \red{\I})\X.
+\end{align*}
+The element highlighted (which is the degree matrix, in this case, the identity matrix) in red shows the only difference to a standard attention operation (as the attention matrix is the only term that appears in the ordinary architecture). Next, we must take a projection step to ensure that $\forall i: \X_i \in \mathcal{S}^{\q-1} \text{ and } \sum_j \X_{ij}=0$, and hence,
+\begin{align*}
+    \X &\longleftarrow \text{LayerNorm}(\X).
+\end{align*}
+We now optimise with respect to $\mathcal{L_{\text{reg}}}$. This is exactly the same form of regularisation (apart from the sparse prior that gives rise to the ReLU, which is ignored for the sake of exposition) as the term that appears in the work of the white-box transformer. We refer the reader to that work for a careful argument for how this term approximately gives rise to a linear update (and a ReLU network if a positivity and sparsity priors are included), but here, we simply approximate, 
+$$\dfrac{d\mathcal{L}_\mathrm{reg}}{d\X} = 2(\X\X^T + \beta \I)^{-1}\X = 2\X(\X^T\X + \beta \I)^{-1}  \approx \X \boldsymbol W,$$
+where $\mathbf{W}$ is an estimate of a decorrelating matrix $(\X^T\X + \beta \I)^{-1}$. Therefore our remaining optimisation steps simply involve a linear update and another projection,
+\begin{align*}
+    \X &\longleftarrow \X + \eta\X\mathbf{W} \\
+    \X &\longleftarrow \text{LayerNorm}(\X),
+\end{align*}
+which completes the transformer block operations, assuming simple initialisations. A key insight is that our probabilistic interpretation does Laplacian smoothing (\textbf{graph diffusion}---i.e. the subtraction of an identity matrix, or a degree matrix, from the attention matrix), whereas the standard attention step does not. The resulting approximations do not change the computational complexity of the transformer as this can be implemented simply as,
+\begin{center}
+    \texttt{x = att @ value \textcontrib{- value}}.
+\end{center}
+For our tiny-shakespeare experiments presented in the next section, this is the only change we made to the nanoGPT source code.
+
+We believe that this helps optimisation due to \textbf{stability} reasons. It can be shown that optimisation of any loss function of the form $\mathcal L = \sum_{ij} \phi(d_{ij}^2)$ involves gradients of the form of a graph Laplacian. We hypothesise that the form of such updates is crucial for optimisation stability, and to prevent collapse to a degenerate solution or oversmoothing\footnote{A related argument is given in \cite{off-by-one},
+who point out that the standard attention forces every head to contribute
+non-trivially, without the possibility of ``doing nothing''.}.
+
+Lastly, we explore what weights do in this framework. We posit that an update such as $\X \longleftarrow \X + \X\mathbf{W}_{\text{lin}}$ can be interpreted as a rotation (which, under the probabilistic Laplacian Eigenmaps model, the solution is invariant to) and a scaling, which, under our interpretation, corresponds to a learnt step size $\eta = |\mathbf{W}|^{1/\q}$. This is a restatement of the belief that transformers \textit{learn to learn}, in other words, perform optimisation (assuming a dimensionality reduction or clustering model) with just $n_{\text{blocks}}$ steps.\footnote{In this view, the transformer is not merely a static function, but an optimisation process where the weights encode the meta-parameters (like step-size) of a gradient descent algorithm tailored to the data distribution. \cite{l2o} provide an overview of the field of learning-to-optimise, a field where models are trained on optimisation problems to enable fast and data-oriented approximate optimisation.}
+
+In the next section, we show two experiments showing that transformers can indeed do act as clustering/dimensionality reduction models at initialisation, and that our modified architecture increases performance in a language and vision task.
+
+\section{Experiments}
+
+We provide two main experiments to show validity of the ideas presented thus far. In the first, we show that an embedding+transformer network initialised in a simple way performs dimensionality reduction and clustering, using flattened images from the MNIST dataset. In the second, we show that removing an identity matrix from the attention matrix as suggested by our derivation increases performance on the Shakespeare dataset and a downsampled (16-by-16) version of ImageNet.
+
+\subsection{Transformers cluster high-dimensional points}
+\label{expt:trans-mnist}
+
+The details of our dimensionality reduction experiment are as follows. We set up a sequential neural network, with the structure:
+$$ \text{flattened image} \rightarrow \text{linear projection that reduces dim.} \rightarrow \text{transformer}. $$
+The initial projection layer was initialised with weights,
+$$\mathbf{W}_\mathrm{proj} \sim \mathcal{MN}(0, \I_d/d, \I_\q),$$
+that is, randomly initialised with Gaussian entries, enforcing a Gaussian random projection. Next, the blocks making up the transformer were initialised as follows:
+\begin{minted}[fontsize=\small]{python}
+block = torch.nn.TransformerEncoderLayer(
+    d_model=128,
+    nhead=1,
+    dim_feedforward=128,
+    dropout=0.0,
+    activation=torch.nn.Identity(),
+    norm_first=False,
+)
+\end{minted}
+which leads to the \texttt{forward(X, src\_mask)} method behaving as,
+\begin{align*}
+  \X &\longleftarrow \X + \sigma\left(\sqrt{\q^{-1}}\X\mathbf{W}_\mathrm{q} \mathbf{W}_\mathrm{k}^T \X^T + \mathbf{M}\right) \X \mathbf{W}_\mathrm{v} \\
+  \X &\longleftarrow \mathrm{LN}(\X)\odot\boldsymbol{\sigma}_\mathrm{ln1} + \boldsymbol\mu_\mathrm{ln1}, \\
+  \X &\longleftarrow \X + \X\mathbf{W}_{\mathrm{lin}} + \boldsymbol\mu \\
+  \X &\longleftarrow \mathrm{LN}(\X)\odot\boldsymbol{\sigma}_\mathrm{ln2} + \boldsymbol\mu_\mathrm{ln2}.
+\end{align*}
+%
+The initialisations are as follows.
+\begin{itemize}
+    \item \textbf{Number of blocks:} 8. We found that increasing the number of blocks makes the latents collapse into extremely tight clusters.
+    \item  \textbf{LayerNorms:} The LayerNorms have post-normalization weights associated with them. We set $\boldsymbol{\sigma}_\mathrm{ln*} = \mathbf{1}/\sqrt{n}$, which is because we expect the optimum to be akin to eigenvectors of a graph Laplacian, which would have variance $1/n$, as explained in the background. All translations are zeroed; $\boldsymbol{\mu}=0$.
+    \item \textbf{Transformer weights}: the transformer block weights are $\mathbf{W}_\mathrm{q} = \sqrt{\kappa n} \I$, $\mathbf{W}_\mathrm{k} = \sqrt{\kappa n/\q} \I$  and $\mathbf{W}_\mathrm{v} = 2\eta$ corresponding to the query, key, value weight matrices. The query and key matrices were set up such that the inner product matrix, pre-softmax, has a diagonal equal to $\kappa$. We set $\kappa=30$, based on the clustering empirically observed in the resulting graph Laplacian's eigenvectors.
+    \item \textbf{Feedforward block}: As we use the out-of-the-box implementation of attention in torch, we emulate the removal of the diagonal degree matrix times $\X$ through the feedforward block. Therefore, the feed-forward block is functionally a single layer with weight $\mathbf{W}_\mathrm{lin} = -2\eta$.
+    \item \textbf{Learning rate}: $\eta=0.4$ and \textbf{latent dimension}: $\q=128$.
+\end{itemize}
+
+With these settings, passing the flattened images through the transformer (where every flattened MNIST vector is treated as one token, with the self-attention being computed across all data points) leads to the embeddings recovered clustering by digit; we show the embeddings in \cref{fig:mnist}.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/probdr_c/mnist.png}
+    \caption{The first two latent dimensions of embeddings constructed from flattened MNIST images after the random initialisation making up the initial embedding later (i.e. the initial projection layer that converts pixels to a latent representation) (\textbf{left}), and after eight steps through a transformer block (\textbf{right}), showing that embeddings that pass through the transformer blocks cluster points in the latent space.}
+    \label{fig:mnist}
+\end{figure}
+This suggests that the transformer acts as a dimensionality reduction and clustering algorithm in our setting. In the next experiment, we explore whether our modified architecture leads to better performance on standard tasks.
+
+\subsection{Graph diffusion improves performance}
+\label{probdr-iii-res-diff}
+
+In the second experiment, we simply replace the attention matrix $\A$ within a transformer architecture, found in nanoGPT \citep{nanogpt} with the negative graph Laplacian $\A - \I$ (the change suggested by our derivation), and measure validation performance over multiple runs on the Shakespeare dataset. We also repurpose the code to build a small vision transformer, and train it naively (i.e. without random augmentations, learning rate schedules, etc.) on the downsampled Imagenet dataset, where all images are 16 by 16 pixels. On this dataset, a benchmark given in \cite{imagenet_downsampled} achieves 40\% validation accuracy, whereas our naïve ViT achieves around 26\%.
+
+In both cases however, \textbf{validation performance} improves when we replace the attention matrix by the negative graph Laplacian. Our implementation was a very simple modification of nanoGPT \citep{nanogpt}, in accordance with the change proposed above, to the attention matrix. We measure validation performance using held-out accuracy on the image task, with about 4\% being used as the held-out sample, and use the validation loss reported by the implementation as a validation metric for the language task.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.75\linewidth]{figures/probdr_c/scores.png}
+    \caption{\textbf{Left:} validation losses on the Shakespeare dataset and \textbf{right:} validation accuracies on a downsampled Imagenet dataset, showing that Laplacian smoothing achieves a better performance in both cases.}
+    \label{fig:shakes-imagenet}
+\end{figure}
+
+In addition to these small-scale experiments, we also ran two pretraining runs of GPT-2 on the OpenWebText dataset \citep{openwebtext} using nanoGPT with and without our modification, but instead of using \texttt{x = x - value}, we use \texttt{x = x - a*value}, where $a \in (0, 1)$ is an optimised parameter. This adds just one single parameter to the full model. This is done because GPT-2 initialisations and training schedules are somewhat optimised for the base transformer architecture\footnote{Based on the insights found by \cite{llm-choices, gpt2}, relating to projection weight initialisations, model size, hyperparameter settings and learning rate schedules.}, whereas, we do not run sweeps to find optimal hyperparameters for our architecture. Furthermore, our runs do not fully converge as in the case of tiny-shakespeare, and we hypothesise that the model is not large enough for the imposed regularisation to work as well out of the box, without hyperparameter sweeps. We find that our modification yields an improvement in the validation loss of $3.1\times 10^{-3}$; we leave extensive testing of the idea to future work.
+
+This concludes our results showing that transformers perform inference in probabilistic Laplacian Eigenmaps, which leads to a graph diffusion step in place of the standard attention step. In the next section, we briefly recap the main takeaways of the chapter.
+
+\section{Discussion}
+
+In this chapter, we have provided an interpretation within which transformer blocks correspond to unrolled inference assuming a probabilistic Laplacian Eigenmaps model. We also show that the ideas of ProbDR, specifically relating to its variational graphs, extend beyond dimensionality reduction to self-supervised learning and transformers, and therefore representation learning more generally. We show that a simple architectural tweak---using a negative Laplacian $\A - \I$ in place of the attention matrix $\A$---can yield gains in language and vision settings. 
+
+Tying the results obtained back to the central claim of the thesis, we have shown that our probabilistic model underpins transformers, and that this insight may lead to a better architecture for general-purpose machine learning. This exemplifies our central philosophy that \textbf{probabilistic models are applicable outside of their primary intended use-cases}.
+
+We envision that it may be possible to start with probabilistic models that are appropriate to domain-specific cases, and unroll optimisation as done here, to introduce new neural architectures. Future work can explore whether non-linear (kernelised) probabilistic models of dimensionality reduction can increase performance in models with lower latent dimensionality.
